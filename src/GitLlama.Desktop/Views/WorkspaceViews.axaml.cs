@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
@@ -78,7 +79,31 @@ public partial class HistoryView : UserControl
 
 public partial class NavigationView : UserControl
 {
-    public NavigationView() => AvaloniaXamlLoader.Load(this);
+    public NavigationView()
+    {
+        AvaloniaXamlLoader.Load(this);
+        foreach (var category in this.GetLogicalDescendants().OfType<Expander>()
+                     .Where(expander => expander.Classes.Contains("navigation")).ToArray())
+        {
+            if (category.Content is not Control content)
+                continue;
+            var maximum = double.IsFinite(content.MaxHeight) ? content.MaxHeight : 260;
+            category.Content = null;
+            category.Content = new ResizableCategoryPanel(content, maximum);
+            if (category.GetLogicalParent() is Border frame)
+            {
+                // Expanded categories use the resize grip's divider; collapsed ones keep their border.
+                void UpdateDivider() => frame.BorderThickness =
+                    category.IsExpanded ? new Avalonia.Thickness(0) : new Avalonia.Thickness(0, 0, 0, 1);
+                UpdateDivider();
+                category.PropertyChanged += (_, e) =>
+                {
+                    if (e.Property == Expander.IsExpandedProperty)
+                        UpdateDivider();
+                };
+            }
+        }
+    }
 
     private void OpenFolder_Click(object? sender, RoutedEventArgs e) =>
         (TopLevel.GetTopLevel(this) as MainWindow)?.OpenRepositoryFolder();
