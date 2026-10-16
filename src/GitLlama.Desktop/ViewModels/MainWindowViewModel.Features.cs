@@ -333,6 +333,7 @@ public partial class MainWindowViewModel
     }
 
     public bool RepositoryCreationSucceeded { get; private set; }
+    public string RepositoryCreationFeedback { get; private set; } = "";
 
     [RelayCommand]
     private async Task InitializeRepositoryAsync()
@@ -343,6 +344,7 @@ public partial class MainWindowViewModel
         }
 
         RepositoryCreationSucceeded = false;
+        RepositoryCreationFeedback = "";
         IsFeatureBusy = true;
         try
         {
@@ -360,7 +362,7 @@ public partial class MainWindowViewModel
                 && SelectedRepository?.Path == Path.GetFullPath(NewRepositoryDestination.Trim());
             if (RepositoryCreationSucceeded)
             {
-                Status =
+                Status = RepositoryCreationFeedback =
                     created.Committed ? "Repository initialized with a first commit."
                     : NewRepositoryInitialCommit
                         ? "Repository initialized. Set your name and email in Settings to make the first commit."
@@ -369,7 +371,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = PresentError(e);
+            Status = RepositoryCreationFeedback = PresentError(e);
         }
         finally
         {
@@ -386,6 +388,7 @@ public partial class MainWindowViewModel
         }
 
         RepositoryCreationSucceeded = false;
+        RepositoryCreationFeedback = "";
         IsNetworkBusy = true;
         try
         {
@@ -402,16 +405,16 @@ public partial class MainWindowViewModel
                 && SelectedRepository?.Path == Path.GetFullPath(NewRepositoryDestination.Trim());
             if (RepositoryCreationSucceeded)
             {
-                Status = "Clone complete.";
+                Status = RepositoryCreationFeedback = "Clone complete.";
             }
         }
         catch (OperationCanceledException)
         {
-            Status = "Clone canceled; the destination may contain downloaded files.";
+            Status = RepositoryCreationFeedback = "Clone canceled; the destination may contain downloaded files.";
         }
         catch (Exception e)
         {
-            Status = PresentError(e);
+            Status = RepositoryCreationFeedback = PresentError(e);
         }
         finally
         {

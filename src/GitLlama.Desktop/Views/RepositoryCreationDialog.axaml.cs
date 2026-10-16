@@ -101,7 +101,8 @@ public partial class RepositoryCreationDialog : Window
                 await _vm.InitializeRepositoryCommand.ExecuteAsync(null);
             }
 
-            Feedback.Text = _vm.Status;
+            // Background repository refreshes can update the status bar while this operation finishes.
+            Feedback.Text = _vm.RepositoryCreationFeedback;
         }
         finally
         {

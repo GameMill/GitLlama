@@ -1939,12 +1939,20 @@ public sealed class WorkspaceTests
             failed.Show();
             Dispatcher.UIThread.RunJobs();
             vm.NewRepositoryDestination = fixture.RepositoryPath;
+            void RefreshStatus(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+            {
+                if (args.PropertyName == nameof(vm.IsFeatureBusy) && !vm.IsFeatureBusy)
+                    vm.Status = "Repository refresh complete.";
+            }
+            vm.PropertyChanged += RefreshStatus;
             failed
                 .FindControl<Button>("Submit")!
                 .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() =>
-                failed.FindControl<TextBlock>("Feedback")!.Text?.Contains("already a repository") == true
+                failed.FindControl<TextBlock>("Feedback")!.Text?.Contains("already a repository") == true,
+                () => $"Feedback: {failed.FindControl<TextBlock>("Feedback")!.Text}; creation: {vm.RepositoryCreationFeedback}; status: {vm.Status}; destination: {vm.NewRepositoryDestination}; busy: {vm.IsFeatureBusy}"
             );
+            vm.PropertyChanged -= RefreshStatus;
             Assert.True(empty.IsEmpty);
             Assert.True(vm.IsRepositoryManagerSelected);
             Assert.True(failed.IsVisible);
@@ -3485,7 +3493,7 @@ public sealed class WorkspaceTests
         }
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    private static async Task WaitUntilAsync(Func<bool> condition, Func<string>? diagnostic = null)
     {
         var deadline = DateTime.UtcNow.AddSeconds(15);
         while (!condition() && DateTime.UtcNow < deadline)
@@ -3493,7 +3501,7 @@ public sealed class WorkspaceTests
             await Task.Delay(20);
         }
 
-        Assert.True(condition(), "Repository UI did not reach the expected state.");
+        Assert.True(condition(), "Repository UI did not reach the expected state. " + diagnostic?.Invoke());
     }
 
     private sealed class WorkspaceFixture : IDisposable
