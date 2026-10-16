@@ -42,7 +42,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception ex)
         {
-            Status = RemoteOperationFeedback = SafeMessage(ex);
+            Status = RemoteOperationFeedback = PresentError(ex);
             return null;
         }
     }
@@ -105,7 +105,7 @@ public partial class MainWindowViewModel
             {
                 Status = RemoteOperationFeedback = ct.IsCancellationRequested
                     ? "Branch operation canceled. Refresh to check its state."
-                    : SafeMessage(ex);
+                    : PresentError(ex);
             }
         }
         finally
@@ -175,7 +175,7 @@ public partial class MainWindowViewModel
         {
             if (request.Version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = RemoteOperationFeedback = SafeMessage(ex);
+                Status = RemoteOperationFeedback = PresentError(ex);
             }
         }
         finally

@@ -36,8 +36,18 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(IsRepositoryManagerSelected));
     }
 
-    partial void OnSelectedRepositoryWorkspaceTabChanged(RepositoryWorkspaceTab? value)
+    partial void OnSelectedRepositoryWorkspaceTabChanged(RepositoryWorkspaceTab? oldValue, RepositoryWorkspaceTab? newValue)
     {
+        var value = newValue;
+        if (_restoringRejectedRepositorySelection)
+            return;
+        if (value?.Repository is { } candidate && !ValidateRepositoryForOpen(candidate))
+        {
+            _restoringRejectedRepositorySelection = true;
+            try { SelectedRepositoryWorkspaceTab = oldValue; }
+            finally { _restoringRejectedRepositorySelection = false; }
+            return;
+        }
         NotifyRepositoryTabs();
         if (value?.Repository is { } repository)
         {
@@ -64,8 +74,12 @@ public partial class MainWindowViewModel
         NotifyRepositoryTabs();
     }
 
-    public void OpenRepositoryTab(GitLlama.Core.RepositoryInfo repository)
+    public bool OpenRepositoryTab(GitLlama.Core.RepositoryInfo repository)
     {
+        if (!ValidateRepositoryForOpen(repository))
+            return false;
+        if (!_loadingSettings)
+            RepositoryOpenError = "";
         // A submodule opens in the tab of the repository it belongs to.
         var existing = RepositoryWorkspaceTabs.FirstOrDefault(tab =>
             string.Equals(
@@ -99,6 +113,7 @@ public partial class MainWindowViewModel
         NotifyRepositoryTabs();
         SelectedRepository = repository;
         _ = PersistAsync();
+        return true;
     }
 
     public void CloseWorkspaceTab(RepositoryWorkspaceTab tab)
@@ -306,7 +321,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _centerContentRevision))
             {
-                WorkingFileContent = SafeMessage(e);
+                WorkingFileContent = PresentError(e);
             }
         }
     }

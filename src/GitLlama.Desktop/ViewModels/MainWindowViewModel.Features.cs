@@ -368,7 +368,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = SafeMessage(e);
+            Status = PresentError(e);
         }
         finally
         {
@@ -410,7 +410,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            Status = SafeMessage(e);
+            Status = PresentError(e);
         }
         finally
         {
@@ -449,7 +449,7 @@ public partial class MainWindowViewModel
         {
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = SafeMessage(e);
+                Status = PresentError(e);
             }
         }
         finally
@@ -690,7 +690,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _featureRevision))
             {
-                SelectedFilePreview = SafeMessage(e);
+                SelectedFilePreview = PresentError(e);
             }
         }
     }
@@ -763,7 +763,7 @@ public partial class MainWindowViewModel
         {
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = SafeMessage(e);
+                Status = PresentError(e);
             }
         }
     }

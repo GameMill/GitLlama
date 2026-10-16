@@ -44,8 +44,8 @@ public partial class RepositoryView : UserControl
     {
         if (DataContext is MainWindowViewModel vm && sender is Button { Tag: GitLlama.Core.RepositoryInfo repository })
         {
-            vm.OpenRepositoryTab(repository);
-            vm.DockDocument?.Invoke("History");
+            if (vm.OpenRepositoryTab(repository))
+                vm.DockDocument?.Invoke("History");
         }
     }
 
@@ -271,7 +271,11 @@ public partial class SettingsView : UserControl
                 {
                     Title = "Choose an SSH public key",
                     AllowMultiple = false,
-                    FileTypeFilter = [new FilePickerFileType("OpenSSH public key") { Patterns = ["*.pub"] }],
+                    FileTypeFilter =
+                    [
+                        new FilePickerFileType("SSH public key (OpenSSH or PuTTY)") { Patterns = ["*.pub"] },
+                        FilePickerFileTypes.All,
+                    ],
                 }
             );
             if (files.FirstOrDefault()?.TryGetLocalPath() is { } path)

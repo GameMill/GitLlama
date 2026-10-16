@@ -60,6 +60,7 @@ public partial class MainWindow : Window
 
             vm.IsOpeningWindow = true;
             vm.DockDocument = ShowDocument;
+            vm.ActivateTool = ActivateTool;
             vm.OpenIntegrationBrowser ??= LaunchIntegrationBrowserAsync;
             vm.SshSession.RequestPassphrase = async (request, ct) =>
                 await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
@@ -390,9 +391,26 @@ public partial class MainWindow : Window
         if (requestedTitle == "History")
         {
             vm.IsWorkingTreeInspector = false;
+            ActivateTool("repositories");
         }
 
         SaveLayout();
+    }
+
+    private void ActivateTool(string id)
+    {
+        var tool = WalkDockables(WorkspaceDock.Layout).FirstOrDefault(d => d.Id == id);
+        if (tool is null)
+        {
+            return;
+        }
+
+        // Select the tool and each containing group, preserving the user's dock arrangement.
+        for (var dockable = tool; dockable.Owner is IDock owner; dockable = owner)
+        {
+            _factory.SetActiveDockable(dockable);
+            owner.ActiveDockable = dockable;
+        }
     }
 
     internal static IEnumerable<IDockable> WalkDockables(IDockable? dockable)

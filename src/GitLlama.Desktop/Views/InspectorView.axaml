@@ -122,6 +122,14 @@
                             <Button Classes="workspace toolbar"
                                     Content="Unstage all"
                                     Command="{Binding UnstageAllCommand}" />
+
+                            <Button x:Name="DiscardAllChangesButton"
+                                    Classes="workspace toolbar"
+                                    Content="Discard all changes…"
+                                    Foreground="#F28B93"
+                                    IsVisible="{Binding CanDiscardAllChanges}"
+                                    IsEnabled="{Binding !IsFeatureBusy}"
+                                    Click="DiscardAll_Click" />
                         </WrapPanel>
                     </StackPanel>
                 </Border>

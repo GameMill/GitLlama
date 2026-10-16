@@ -180,7 +180,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _publicKeyRevision))
             {
-                SshKeyFeedback = e is InvalidOperationException ? e.Message : "The public key file could not be read.";
+                SshKeyFeedback = PresentError(e is InvalidOperationException ? e.Message : "The public key file could not be read.");
             }
         }
     }
@@ -244,7 +244,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            AuthenticationFeedback = SafeMessage(e);
+            AuthenticationFeedback = PresentError(e);
         }
         finally
         {
@@ -341,7 +341,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            AuthenticationFeedback = SafeMessage(e);
+            AuthenticationFeedback = PresentError(e);
         }
         finally
         {
@@ -393,7 +393,7 @@ public partial class MainWindowViewModel
         catch (Exception e)
         {
             GithubAccountStatus =
-                e is InvalidOperationException ? e.Message : "GitHub connection failed. Check your network and token.";
+                PresentError(e is InvalidOperationException ? e.Message : "GitHub connection failed. Check your network and token.");
         }
         finally
         {

@@ -55,7 +55,8 @@ public partial class ConflictResolverView : UserControl
         {
             _resolver.NavigateRequested += ScrollTo;
             // The panes fill in after layout, so jump to the first conflict once they have.
-            var first = _resolver.Chunks.FirstOrDefault();
+            var first = _resolver.Chunks.FirstOrDefault(chunk => chunk.Number == _resolver.CurrentConflict)
+                ?? _resolver.Chunks.FirstOrDefault();
             if (first is not null)
             {
                 Dispatcher.UIThread.Post(() => ScrollTo(first), DispatcherPriority.Background);

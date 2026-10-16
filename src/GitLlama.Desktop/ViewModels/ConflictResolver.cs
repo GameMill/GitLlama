@@ -198,6 +198,18 @@ public sealed partial class ConflictResolverViewModel : ObservableObject
     );
 
     public string Path => _document.Path;
+
+    internal bool MatchesSource(GitConflictDocument document) =>
+        _document.Path == document.Path
+        && _document.SourceIdentity == document.SourceIdentity
+        && _document.Ours == document.Ours && _document.Theirs == document.Theirs
+        && _document.LineEnding == document.LineEnding && _document.EndsWithNewline == document.EndsWithNewline
+        && _document.Segments.Count == document.Segments.Count
+        && _document.Segments.Zip(document.Segments).All(pair =>
+            pair.First.IsConflict == pair.Second.IsConflict
+            && pair.First.Common.SequenceEqual(pair.Second.Common)
+            && pair.First.Ours.SequenceEqual(pair.Second.Ours)
+            && pair.First.Theirs.SequenceEqual(pair.Second.Theirs));
     public string OursTitle => Title(_document.Ours);
     public string TheirsTitle => Title(_document.Theirs);
     public string OursSha => _document.Ours.ShortSha;

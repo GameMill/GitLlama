@@ -484,6 +484,18 @@
                         </Grid>
                     </Border>
 
+                    <Border x:Name="RepositoryOpenErrorBanner"
+                            IsVisible="{Binding HasRepositoryOpenError}"
+                            Background="#3B2F32" BorderBrush="#72505A" BorderThickness="0,0,0,1"
+                            Padding="14,10">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <TextBlock Text="{Binding RepositoryOpenError}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="workspace toolbar" Content="✕"
+                                    Command="{Binding DismissRepositoryOpenErrorCommand}"
+                                    ToolTip.Tip="Dismiss repository error" VerticalAlignment="Top" />
+                        </Grid>
+                    </Border>
+
                     <Border x:Name="RemoteFeedbackBanner"
                             IsVisible="{Binding HasRemoteOperationFeedback}"
                             Background="#2B3B50"
@@ -648,6 +660,7 @@
             <Border x:Name="SshPromptBackdrop"
                     Background="#99000000"
                     IsVisible="False" />
+            <views:ErrorNotificationsView x:Name="ErrorNotifications" />
         </Grid>
     </Border>
 </Window>

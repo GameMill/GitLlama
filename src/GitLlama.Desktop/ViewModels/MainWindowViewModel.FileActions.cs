@@ -5,6 +5,18 @@ namespace GitLlama.Desktop.ViewModels;
 /// <summary>Actions offered on a changed file's right-click menu.</summary>
 public partial class MainWindowViewModel
 {
+    public bool CanDiscardAllChanges => WorkingFiles.Count > 0 && !HasMergeConflicts && RepositoryOperation == "None";
+
+    public async Task DiscardAllChangesAsync()
+    {
+        if (!CanDiscardAllChanges || IsFeatureBusy)
+            return;
+        await RunFeatureMutationAsync(
+            repo => new GitDiscardAllService().DiscardAsync(repo, "DISCARD"),
+            "Discarded all changes.");
+        CloseReviewIfUnchanged();
+    }
+
     private readonly GitIgnoreService _ignore = new();
 
     /// <summary>The absolute path of a repository file, or null when no repository is open.</summary>

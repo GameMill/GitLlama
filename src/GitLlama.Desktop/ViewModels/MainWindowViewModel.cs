@@ -129,7 +129,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Execute editable rebase plan");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -153,7 +153,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (!string.Equals(RebaseConfirmation, "REBASE", StringComparison.Ordinal))
         {
-            Status = "Type REBASE to confirm rewriting local commit history.";
+            Status = PresentError("Type REBASE to confirm rewriting local commit history.", "Action needs attention");
             return;
         }
 
@@ -174,7 +174,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Rebase branch");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -205,7 +205,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Continue cherry-pick/revert");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -231,7 +231,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Abort cherry-pick/revert");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -274,7 +274,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Accept conflict stage");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -320,7 +320,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect three-way conflict");
             if (version == Interlocked.Read(ref _repositorySelectionVersion) && ConflictPath == path)
             {
-                ConflictBaseText = e.Message;
+                ConflictBaseText = PresentError(e);
             }
         }
     }
@@ -363,7 +363,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Merge branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
 
             await InspectMergeConflictsAsync();
@@ -396,7 +396,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Inspect merge conflicts");
-            ConflictSummary = e.Message;
+            ConflictSummary = PresentError(e);
         }
     }
 
@@ -424,7 +424,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Resolve conflict");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -457,7 +457,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Continue merge");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -489,7 +489,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Abort merge");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -703,7 +703,7 @@ public partial class MainWindowViewModel : ObservableObject
                 && selectionVersion == Interlocked.Read(ref _repositorySelectionVersion)
             )
             {
-                HistoryCommitDetails = e.Message;
+                HistoryCommitDetails = PresentError(e);
             }
         }
     }
@@ -754,7 +754,7 @@ public partial class MainWindowViewModel : ObservableObject
                 && selectionVersion == Interlocked.Read(ref _repositorySelectionVersion)
             )
             {
-                HistoryFilePreview = e.Message;
+                HistoryFilePreview = PresentError(e);
             }
         }
     }
@@ -1021,7 +1021,7 @@ public partial class MainWindowViewModel : ObservableObject
                 && selectionVersion == Interlocked.Read(ref _repositorySelectionVersion)
             )
             {
-                UnstagedDiffText = e.Message;
+                UnstagedDiffText = PresentError(e);
             }
         }
     }
@@ -1178,6 +1178,8 @@ public partial class MainWindowViewModel : ObservableObject
                 foreach (var path in paths)
                 {
                     var repository = Repositories.FirstOrDefault(repo => repo.Path == path);
+                    if (repository is not null && !ValidateRepositoryForOpen(repository))
+                        continue;
                     if (path is null || repository is not null)
                     {
                         RepositoryWorkspaceTabs.Add(new RepositoryWorkspaceTab { Repository = repository });
@@ -1198,7 +1200,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Load settings");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -1220,8 +1222,18 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedRepositoryChanged(RepositoryInfo? value)
+    partial void OnSelectedRepositoryChanged(RepositoryInfo? oldValue, RepositoryInfo? newValue)
     {
+        var value = newValue;
+        if (_restoringRejectedRepositorySelection)
+            return;
+        if (value is not null && !ValidateRepositoryForOpen(value))
+        {
+            _restoringRejectedRepositorySelection = true;
+            try { SelectedRepository = oldValue; }
+            finally { _restoringRejectedRepositorySelection = false; }
+            return;
+        }
         if (_updatingRepositoryFavorite)
         {
             return;
@@ -1313,7 +1325,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Open repository");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
     }
@@ -1341,7 +1353,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Read Git identity");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                ConfiguredIdentity = "Unable to read Git identity: " + e.Message;
+                ConfiguredIdentity = "Unable to read Git identity: " + PresentError(e);
             }
         }
     }
@@ -1385,7 +1397,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Save local Git identity");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -1449,7 +1461,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception e)
         {
             FileLog.Error(e, "Repository workspace operation");
-            Status = e.Message;
+            Status = PresentError(e);
         }
         finally
         {
@@ -1675,7 +1687,7 @@ public partial class MainWindowViewModel : ObservableObject
                 && refreshVersion == Interlocked.Read(ref _refreshRevision)
             )
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
     }
@@ -1764,14 +1776,15 @@ public partial class MainWindowViewModel : ObservableObject
                 Repositories.Add(existing);
             }
 
-            OpenRepositoryTab(existing);
+            if (!OpenRepositoryTab(existing))
+                return;
             RepositoryPath = "";
             await PersistAsync();
         }
         catch (Exception e)
         {
             FileLog.Error(e, "Repository workspace operation");
-            Status = e.Message;
+            ReportRepositoryOpenError("repository", RepositoryPath, e);
         }
     }
 
@@ -1850,7 +1863,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Add remote");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -1892,7 +1905,7 @@ public partial class MainWindowViewModel : ObservableObject
         {
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = cancellationToken.IsCancellationRequested ? "Fetch canceled." : SafeMessage(e);
+                Status = cancellationToken.IsCancellationRequested ? "Fetch canceled." : PresentError(e);
             }
         }
         finally
@@ -1977,7 +1990,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 Status = RemoteOperationFeedback = cancellationToken.IsCancellationRequested
                     ? "Push canceled; refresh the remote to check its state."
-                    : $"Push to {remote.Name} failed: {message}";
+                    : PresentError($"Push to {remote.Name} failed: {message}", "Push failed");
             }
 
             if (
@@ -2025,7 +2038,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Load remote branches");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
     }
@@ -2080,7 +2093,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Checkout remote branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2121,7 +2134,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Set upstream");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2161,7 +2174,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Clear upstream");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2213,7 +2226,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 Status = cancellationToken.IsCancellationRequested
                     ? "Pull canceled; refresh to inspect the repository."
-                    : SafeMessage(e);
+                    : PresentError(e);
             }
         }
         finally
@@ -2255,7 +2268,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Remove remote");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2294,7 +2307,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 Status = cancellationToken.IsCancellationRequested
                     ? "Tag push canceled; refresh the remote to inspect its state."
-                    : SafeMessage(e);
+                    : PresentError(e);
             }
         }
         finally
@@ -2316,7 +2329,7 @@ public partial class MainWindowViewModel : ObservableObject
         var expected = $"{remote.Name}/{tag.Name}";
         if (!string.Equals(RemoteTagDeletionConfirmation.Trim(), expected, StringComparison.Ordinal))
         {
-            Status = $"Type {expected} to confirm remote tag deletion.";
+            Status = PresentError($"Type {expected} to confirm remote tag deletion.", "Action needs attention");
             return;
         }
 
@@ -2345,7 +2358,7 @@ public partial class MainWindowViewModel : ObservableObject
             {
                 Status = cancellationToken.IsCancellationRequested
                     ? "Remote tag deletion canceled; refresh the remote to inspect its state."
-                    : SafeMessage(e);
+                    : PresentError(e);
             }
         }
         finally
@@ -2367,7 +2380,7 @@ public partial class MainWindowViewModel : ObservableObject
         var tagName = tag.Name;
         if (!string.Equals(TagDeletionConfirmation.Trim(), tagName, StringComparison.Ordinal))
         {
-            Status = $"Type {tagName} to confirm local tag deletion.";
+            Status = PresentError($"Type {tagName} to confirm local tag deletion.", "Action needs attention");
             return;
         }
 
@@ -2396,7 +2409,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Delete local tag");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2443,7 +2456,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Pop stash");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2489,7 +2502,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Apply stash");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2509,7 +2522,7 @@ public partial class MainWindowViewModel : ObservableObject
         var expected = $"stash@{{{stash.Index}}}";
         if (!string.Equals(StashDropConfirmation.Trim(), expected, StringComparison.Ordinal))
         {
-            Status = $"Type {expected} to confirm permanent stash deletion.";
+            Status = PresentError($"Type {expected} to confirm permanent stash deletion.", "Action needs attention");
             return;
         }
 
@@ -2544,7 +2557,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Drop stash");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2563,7 +2576,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         if (StashBlockedReason is { } blocked)
         {
-            Status = blocked;
+            Status = PresentError(blocked, "Action needs attention");
             return;
         }
 
@@ -2594,7 +2607,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Save staged stash");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2612,14 +2625,14 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select a commit in History to create a branch from.";
+            Status = PresentError("Select a commit in History to create a branch from.", "Action needs attention");
             return;
         }
 
         var name = BranchFromCommitName.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            Status = "Enter a name for the new branch.";
+            Status = PresentError("Enter a name for the new branch.", "Action needs attention");
             return;
         }
 
@@ -2647,7 +2660,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Create branch from commit");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2665,14 +2678,14 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select an ancestor commit in History.";
+            Status = PresentError("Select an ancestor commit in History.", "Action needs attention");
             return;
         }
 
         var expected = $"HARD RESET {commit.Sha[..7]}";
         if (!string.Equals(HardResetConfirmation.Trim(), expected, StringComparison.Ordinal))
         {
-            Status = $"Type {expected} to confirm discarding commits and resetting tracked files.";
+            Status = PresentError($"Type {expected} to confirm discarding commits and resetting tracked files.", "Action needs attention");
             return;
         }
 
@@ -2700,7 +2713,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Hard reset");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2718,14 +2731,14 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select an ancestor commit in History.";
+            Status = PresentError("Select an ancestor commit in History.", "Action needs attention");
             return;
         }
 
         var expected = $"MIXED {commit.Sha[..7]}";
         if (!string.Equals(MixedResetConfirmation.Trim(), expected, StringComparison.Ordinal))
         {
-            Status = $"Type {expected} to confirm moving HEAD and unstaging changes.";
+            Status = PresentError($"Type {expected} to confirm moving HEAD and unstaging changes.", "Action needs attention");
             return;
         }
 
@@ -2753,7 +2766,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Mixed reset");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2771,14 +2784,14 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select an ancestor commit in History.";
+            Status = PresentError("Select an ancestor commit in History.", "Action needs attention");
             return;
         }
 
         var expected = $"RESET {commit.Sha[..7]}";
         if (!string.Equals(SoftResetConfirmation.Trim(), expected, StringComparison.Ordinal))
         {
-            Status = $"Type {expected} to confirm moving HEAD.";
+            Status = PresentError($"Type {expected} to confirm moving HEAD.", "Action needs attention");
             return;
         }
 
@@ -2806,7 +2819,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Soft reset");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2824,7 +2837,7 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select a commit in History to revert.";
+            Status = PresentError("Select a commit in History to revert.", "Action needs attention");
             return;
         }
 
@@ -2852,7 +2865,7 @@ public partial class MainWindowViewModel : ObservableObject
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
                 await RefreshAsync();
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2870,7 +2883,7 @@ public partial class MainWindowViewModel : ObservableObject
             || !_commitDetails.TryGetValue(line, out var commit)
         )
         {
-            Status = "Select a commit in History to cherry-pick.";
+            Status = PresentError("Select a commit in History to cherry-pick.", "Action needs attention");
             return;
         }
 
@@ -2898,7 +2911,7 @@ public partial class MainWindowViewModel : ObservableObject
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
                 await RefreshAsync();
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2918,7 +2931,7 @@ public partial class MainWindowViewModel : ObservableObject
         var message = AmendedCommitMessage.Trim();
         if (string.IsNullOrWhiteSpace(message))
         {
-            Status = "Enter a replacement commit message.";
+            Status = PresentError("Enter a replacement commit message.", "Action needs attention");
             return;
         }
 
@@ -2946,7 +2959,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Amend commit message");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -2974,7 +2987,7 @@ public partial class MainWindowViewModel : ObservableObject
             || string.IsNullOrWhiteSpace(authorEmail)
         )
         {
-            Status = "Annotated tags require a name, message, author name and author email.";
+            Status = PresentError("Annotated tags require a name, message, author name and author email.", "Action needs attention");
             return;
         }
 
@@ -3003,7 +3016,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Create annotated tag");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3045,7 +3058,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Create lightweight tag");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3090,8 +3103,8 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Preview rebase plan");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                RebasePlanPreview = e.Message;
-                Status = e.Message;
+                RebasePlanPreview = PresentError(e);
+                Status = PresentError(e);
             }
         }
     }
@@ -3131,7 +3144,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect rebase conflicts");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = RebaseConflictSummary = e.Message;
+                Status = RebaseConflictSummary = PresentError(e);
             }
         }
     }
@@ -3169,7 +3182,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Load commit graph");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = CommitGraphSummary = e.Message;
+                Status = CommitGraphSummary = PresentError(e);
             }
         }
     }
@@ -3209,7 +3222,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Load graph lanes");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = GraphLaneSummary = e.Message;
+                Status = GraphLaneSummary = PresentError(e);
             }
         }
     }
@@ -3247,7 +3260,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Search commits");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = CommitSearchSummary = e.Message;
+                Status = CommitSearchSummary = PresentError(e);
             }
         }
     }
@@ -3287,7 +3300,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect blame");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = BlameSummary = e.Message;
+                Status = BlameSummary = PresentError(e);
             }
         }
     }
@@ -3322,7 +3335,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Load file history");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = FileHistorySummary = e.Message;
+                Status = FileHistorySummary = PresentError(e);
             }
         }
     }
@@ -3362,7 +3375,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect tags");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = TagInspectionSummary = e.Message;
+                Status = TagInspectionSummary = PresentError(e);
             }
         }
     }
@@ -3393,7 +3406,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit ancestry");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = AncestrySummary = e.Message;
+                Status = AncestrySummary = PresentError(e);
             }
         }
     }
@@ -3429,7 +3442,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit descendants");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = DescendantSummary = e.Message;
+                Status = DescendantSummary = PresentError(e);
             }
         }
     }
@@ -3465,7 +3478,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect merge base");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = MergeBaseSummary = e.Message;
+                Status = MergeBaseSummary = PresentError(e);
             }
         }
     }
@@ -3500,7 +3513,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit relationship");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = RelationshipSummary = e.Message;
+                Status = RelationshipSummary = PresentError(e);
             }
         }
     }
@@ -3531,7 +3544,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit diff statistics");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = DiffStatisticsSummary = e.Message;
+                Status = DiffStatisticsSummary = PresentError(e);
             }
         }
     }
@@ -3564,7 +3577,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit changed files");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = ChangedFilesSummary = e.Message;
+                Status = ChangedFilesSummary = PresentError(e);
             }
         }
     }
@@ -3600,7 +3613,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit file statistics");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = FileStatisticsSummary = e.Message;
+                Status = FileStatisticsSummary = PresentError(e);
             }
         }
     }
@@ -3631,7 +3644,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect commit file patch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = FilePatchSummary = e.Message;
+                Status = FilePatchSummary = PresentError(e);
             }
         }
     }
@@ -3665,7 +3678,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Inspect historical file content");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = FileContentSummary = e.Message;
+                Status = FileContentSummary = PresentError(e);
             }
         }
     }
@@ -3703,7 +3716,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Create branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3752,7 +3765,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Checkout branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3806,7 +3819,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Rename branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3852,7 +3865,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Delete branch");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3922,7 +3935,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Discard unstaged changes");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -3993,7 +4006,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, stage ? "Stage file" : "Unstage file");
             if (SelectedRepository?.Path == repo.Path)
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally
@@ -4045,7 +4058,7 @@ public partial class MainWindowViewModel : ObservableObject
             FileLog.Error(e, "Create commit");
             if (SelectedRepository?.Path == repo.Path)
             {
-                Status = e.Message;
+                Status = PresentError(e);
             }
         }
         finally

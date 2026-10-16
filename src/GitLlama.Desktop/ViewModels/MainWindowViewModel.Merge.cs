@@ -8,6 +8,8 @@ namespace GitLlama.Desktop.ViewModels;
 
 public partial class MainWindowViewModel
 {
+    private readonly Dictionary<string, ConflictResolverViewModel> _conflictDrafts = new(StringComparer.Ordinal);
+    private long _conflictOpenRevision;
     /// <summary>The Git operation that stopped part-way, such as "Merge" or "Rebase", or "None".</summary>
     [ObservableProperty]
     private string repositoryOperation = "None";
@@ -64,6 +66,7 @@ public partial class MainWindowViewModel
     {
         if (!value)
         {
+            Interlocked.Increment(ref _conflictOpenRevision);
             ConflictResolver = null;
         }
     }
@@ -76,12 +79,19 @@ public partial class MainWindowViewModel
             file => file.Path
         );
         CollectionUpdates.Sync(ResolvedFiles, WorkingFiles.Where(file => file.Status != "Conflict"), file => file.Path);
+        if (_conflictDrafts.Count > 0)
+        {
+            var conflictedPaths = ConflictedFiles.Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
+            foreach (var path in _conflictDrafts.Keys.Where(path => !conflictedPaths.Contains(path)).ToArray())
+                _conflictDrafts.Remove(path);
+        }
         OnPropertyChanged(nameof(ConflictedFilesCaption));
         OnPropertyChanged(nameof(SelectedConflictFile));
         OnPropertyChanged(nameof(ResolvedFilesCaption));
         OnPropertyChanged(nameof(HasResolvedFiles));
         OnPropertyChanged(nameof(IsConflictInspector));
         OnPropertyChanged(nameof(IsCommitInspector));
+        OnPropertyChanged(nameof(CanDiscardAllChanges));
         OnPropertyChanged(nameof(WorkingInspectorTitle));
         OnPropertyChanged(nameof(ConflictedFileCount));
         OnPropertyChanged(nameof(HasMergeConflicts));
@@ -108,33 +118,44 @@ public partial class MainWindowViewModel
         }
 
         var version = Interlocked.Read(ref _repositorySelectionVersion);
+        var revision = Interlocked.Increment(ref _conflictOpenRevision);
         try
         {
             var document = await _conflictDocuments.ReadAsync(repo.Path, path);
-            if (version != Interlocked.Read(ref _repositorySelectionVersion))
+            if (version != Interlocked.Read(ref _repositorySelectionVersion)
+                || revision != Interlocked.Read(ref _conflictOpenRevision))
             {
                 return;
             }
 
-            var resolver = new ConflictResolverViewModel(document);
+            var reused = _conflictDrafts.TryGetValue(path, out var resolver) && resolver.MatchesSource(document);
+            if (!reused)
+            {
+                resolver = new ConflictResolverViewModel(document);
+                _conflictDrafts[path] = resolver;
+            }
             IsFileReview = false;
             IsWorkingTreeInspector = true;
             ConflictResolver = resolver;
             IsConflictResolver = true;
-            resolver.Navigate(1);
+            resolver!.Navigate(reused ? resolver.CurrentConflict : 1);
         }
         catch (Exception e)
         {
             FileLog.Error(e, "Open conflict resolver");
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = SafeMessage(e);
+                Status = PresentError(e);
             }
         }
     }
 
     [RelayCommand]
-    private void CloseConflictResolver() => IsConflictResolver = false;
+    private void CloseConflictResolver()
+    {
+        Interlocked.Increment(ref _conflictOpenRevision);
+        IsConflictResolver = false;
+    }
 
     /// <summary>Writes the resolver's output, marks the file resolved and moves on to the next conflicted file.</summary>
     [RelayCommand]

@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GitLlama.Desktop.Views.ErrorNotificationsView"
+             IsVisible="{Binding HasErrorNotifications}"
+             Width="430" MaxHeight="430" Margin="16,48,16,34"
+             HorizontalAlignment="Right" VerticalAlignment="Bottom">
+    <Grid RowDefinitions="Auto,*">
+        <Button Classes="workspace" Content="Dismiss errors" HorizontalAlignment="Right" Margin="0,0,0,6"
+                Command="{Binding DismissAllErrorsCommand}" />
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" AllowAutoHide="False">
+            <ItemsControl x:Name="ErrorNotificationList" ItemsSource="{Binding ErrorNotifications}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#382E33" BorderBrush="#C46C77" BorderThickness="3,1,1,1"
+                                CornerRadius="7" Padding="14,10" Margin="0,0,0,8">
+                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="7">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="#FFCAD0"
+                                           VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Classes="workspace toolbar" Content="✕" Padding="5,0"
+                                        MinHeight="24" ToolTip.Tip="Dismiss error"
+                                        Command="{Binding $parent[Window].DataContext.DismissErrorCommand}"
+                                        CommandParameter="{Binding}" />
+                                <ScrollViewer Grid.Row="1" Grid.ColumnSpan="2" MaxHeight="130"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#F2F3F5" />
+                                </ScrollViewer>
+                                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="{Binding RepeatText}"
+                                           FontSize="11" Foreground="#C4ADB5" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

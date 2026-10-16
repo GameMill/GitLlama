@@ -276,9 +276,9 @@ public partial class MainWindowViewModel
             if (!_disposed)
             {
                 GithubAccountStatus =
-                    e is InvalidOperationException
+                    PresentError(e is InvalidOperationException
                         ? e.Message
-                        : "GitHub sign-in failed. Check your connection and try again.";
+                        : "GitHub sign-in failed. Check your connection and try again.");
             }
         }
         finally

@@ -346,6 +346,8 @@ public partial class MainWindowViewModel
 
     private void ResetPresentation()
     {
+        _conflictDrafts.Clear();
+        Interlocked.Increment(ref _conflictOpenRevision);
         IsFileReview = false;
         IsConflictResolver = false;
         CenterSection = "History";
@@ -440,6 +442,7 @@ public partial class MainWindowViewModel
         {
             IsFileReview = false;
         }
+        ActivateTool?.Invoke("inspector");
     }
 
     partial void OnSelectedTagChanged(GitTagInfo? value)

@@ -7,6 +7,7 @@ namespace GitLlama.Desktop.ViewModels;
 public partial class MainWindowViewModel
 {
     internal Action<string>? DockDocument { get; set; }
+    internal Action<string>? ActivateTool { get; set; }
 
     [ObservableProperty]
     private string contextBranchReference = "HEAD";
@@ -101,7 +102,7 @@ public partial class MainWindowViewModel
         {
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = SafeMessage(e);
+                Status = PresentError(e);
             }
         }
         finally

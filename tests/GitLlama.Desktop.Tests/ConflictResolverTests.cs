@@ -6,6 +6,26 @@ namespace GitLlama.Desktop.Tests;
 
 public sealed class ConflictResolverTests
 {
+    [Fact]
+    public void DraftIsReusableOnlyWhenConflictStagesAndWorkingContentMatch()
+    {
+        var document = new GitConflictDocument("file.txt", new("1111111", "main"), new("2222222", "incoming"),
+            [GitConflictSegment.Conflict(["ours"], ["theirs"])], "\n", true) { SourceIdentity = "original-stages" };
+        var resolver = new ConflictResolverViewModel(document);
+        resolver.Chunks[0].TakeTheirs = true;
+        Assert.True(resolver.MatchesSource(document with
+        {
+            Segments = [GitConflictSegment.Conflict(["ours"], ["theirs"])],
+        }));
+        Assert.False(resolver.MatchesSource(document with { SourceIdentity = "different-stages" }));
+        Assert.False(resolver.MatchesSource(document with
+        {
+            Segments = [GitConflictSegment.Conflict(["external edit"], ["theirs"])],
+        }));
+        Assert.False(resolver.MatchesSource(document with { LineEnding = "\r\n" }));
+        Assert.False(resolver.MatchesSource(document with { Path = "other.txt" }));
+    }
+
     private static ConflictResolverViewModel Resolver(string lineEnding = "\n") =>
         new(
             new GitConflictDocument(

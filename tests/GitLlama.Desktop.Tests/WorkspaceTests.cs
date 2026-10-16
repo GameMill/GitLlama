@@ -36,6 +36,212 @@ public static class TestAppBuilder
 
 public sealed class WorkspaceTests
 {
+    [AvaloniaFact]
+    public async Task DiscardAllInspectorActionIsRedConfirmsAndHidesForCleanOrConflictedWorkspaces()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        vm.IsWorkingTreeInspector = true;
+        var view = new InspectorView { DataContext = vm };
+        var window = new Window { Content = view, Width = 500, Height = 850 };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var button = view.FindControl<Button>("DiscardAllChangesButton")!;
+            Assert.True(button.IsEffectivelyVisible);
+            Assert.Equal("#fff28b93", button.Foreground!.ToString()!.ToLowerInvariant());
+            var conflict = new WorkingFileRow("conflict", "conflict.txt", "Conflicted");
+            vm.WorkingFiles.Add(conflict);
+            Assert.False(button.IsVisible);
+            vm.WorkingFiles.Remove(conflict);
+            vm.RepositoryOperation = "Merge";
+            Assert.False(button.IsVisible);
+            vm.RepositoryOperation = "None";
+            Assert.True(button.IsVisible);
+
+            button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitUntilAsync(() => window.OwnedWindows.Any());
+            var dialog = window.OwnedWindows.Single();
+            dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Cancel"))
+                .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitUntilAsync(() => !dialog.IsVisible);
+            Assert.NotEmpty(vm.WorkingFiles);
+            button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitUntilAsync(() => window.OwnedWindows.Any());
+            dialog = window.OwnedWindows.Single();
+            var confirm = dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Discard all changes"));
+            Assert.False(confirm.IsDefault);
+            confirm.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitUntilAsync(() => !vm.IsFeatureBusy && vm.WorkingFiles.Count == 0);
+            Assert.False(button.IsVisible);
+            Assert.Equal("Discarded all changes.", vm.Status);
+            Assert.Empty(vm.ErrorNotifications);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WorkingChangesAndHistoryActivateTheirGroupedTool(bool groupOnLeft)
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            await WaitUntilAsync(() => !vm.IsLoading);
+            var control = window.FindControl<Dock.Avalonia.Controls.DockControl>("WorkspaceDock")!;
+            var tools = MainWindow.WalkDockables(control.Layout).ToArray();
+            var repository = tools.Single(d => d.Id == "repositories");
+            var inspector = tools.Single(d => d.Id == "inspector");
+            var left = (Dock.Model.Core.IDock)repository.Owner!;
+            var right = (Dock.Model.Core.IDock)inspector.Owner!;
+            var group = groupOnLeft ? left : right;
+            control.Factory!.MoveDockable(
+                groupOnLeft ? right : left, group,
+                groupOnLeft ? inspector : repository,
+                groupOnLeft ? repository : inspector);
+            group.ActiveDockable = repository;
+
+            window.ShowDocument("Changes");
+            Assert.True(vm.IsWorkingTreeInspector);
+            Assert.Same(inspector, group.ActiveDockable);
+
+            window.ShowDocument("History");
+            Assert.False(vm.IsWorkingTreeInspector);
+            Assert.False(vm.IsFileReview);
+            Assert.Same(repository, group.ActiveDockable);
+
+            // Commands used inside panels must reveal the tool too, even without the toolbar handler.
+            vm.ShowWorkingTreeCommand.Execute(null);
+            Assert.Same(inspector, group.ActiveDockable);
+            window.ShowDocument("History");
+            Assert.Same(repository, group.ActiveDockable);
+            Assert.Same(group, repository.Owner);
+            Assert.Same(group, inspector.Owner);
+            Assert.Equal(2, group.VisibleDockables!.Count);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task FailedActionsShowPersistentErrorCardsAndGroupRepeatedFailures()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        Assert.Empty(vm.ErrorNotifications);
+        vm.SelectedBranchLine = "missing-error-test";
+        await vm.CheckoutBranchCommand.ExecuteAsync(null);
+        var error = Assert.Single(vm.ErrorNotifications);
+        Assert.Contains("does not exist", error.Message);
+        await vm.CheckoutBranchCommand.ExecuteAsync(null);
+        Assert.Same(error, Assert.Single(vm.ErrorNotifications));
+        Assert.Equal(2, error.Occurrences);
+        vm.Status = "Ready";
+        await vm.RefreshCommand.ExecuteAsync(null);
+        Assert.Same(error, Assert.Single(vm.ErrorNotifications));
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            await WaitUntilAsync(() => !vm.IsLoading);
+            var notifications = window.FindControl<ErrorNotificationsView>("ErrorNotifications")!;
+            Assert.True(notifications.IsVisible);
+            SavePreview(window, "visible-error-cards.png");
+            var dismiss = notifications.GetVisualDescendants().OfType<Button>()
+                .Single(button => ReferenceEquals(button.Command, vm.DismissErrorCommand));
+            dismiss.Command!.Execute(dismiss.CommandParameter);
+            Assert.Empty(vm.ErrorNotifications);
+            Assert.False(notifications.IsVisible);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task ErrorCardsRedactCredentialsAndDoNotTreatCancellationAsFailure()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.NetworkSecret = "private-test-credential";
+        vm.PresentError(new IOException("Cannot connect: private-test-credential https://user:password@example.com/repo"));
+        var error = Assert.Single(vm.ErrorNotifications);
+        Assert.DoesNotContain("private-test-credential", error.Message);
+        Assert.DoesNotContain("user:password", error.Message);
+        Assert.Contains("[redacted]", error.Message);
+        vm.PresentError(new OperationCanceledException());
+        Assert.Single(vm.ErrorNotifications);
+        vm.DismissAllErrorsCommand.Execute(null);
+        Assert.False(vm.HasErrorNotifications);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingRepositoryIsRejectedWithoutChangingTheCurrentWorkspace()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var originalRepository = vm.SelectedRepository;
+        var originalTab = vm.SelectedRepositoryWorkspaceTab;
+        var originalHistory = vm.HistoryRows.ToArray();
+        var count = vm.RepositoryWorkspaceTabs.Count;
+        var missing = new RepositoryInfo(Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing"), "Missing");
+        vm.OpenRepositoryTab(missing);
+        Assert.Same(originalRepository, vm.SelectedRepository);
+        Assert.Same(originalTab, vm.SelectedRepositoryWorkspaceTab);
+        Assert.Equal(count, vm.RepositoryWorkspaceTabs.Count);
+        Assert.Equal(originalHistory, vm.HistoryRows);
+        Assert.Contains("missing or unavailable", vm.RepositoryOpenError);
+        Assert.Contains(missing.Path, vm.RepositoryOpenError);
+
+        vm.SelectedRepository = missing;
+        Assert.Same(originalRepository, vm.SelectedRepository);
+        Assert.Equal(originalHistory, vm.HistoryRows);
+        var missingTab = new RepositoryWorkspaceTab { Repository = missing };
+        vm.RepositoryWorkspaceTabs.Add(missingTab);
+        vm.SelectedRepositoryWorkspaceTab = missingTab;
+        Assert.Same(originalTab, vm.SelectedRepositoryWorkspaceTab);
+        Assert.Same(originalRepository, vm.SelectedRepository);
+
+        Directory.CreateDirectory(missing.Path);
+        vm.OpenRepositoryTab(missing);
+        Assert.Contains("no longer a Git repository", vm.RepositoryOpenError);
+        Assert.Same(originalRepository, vm.SelectedRepository);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            await WaitUntilAsync(() => !vm.IsLoading);
+            Assert.True(window.FindControl<Border>("RepositoryOpenErrorBanner")!.IsVisible);
+            vm.DismissRepositoryOpenErrorCommand.Execute(null);
+            Assert.False(window.FindControl<Border>("RepositoryOpenErrorBanner")!.IsVisible);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task StartupDoesNotOpenMissingSavedRepositoryTabs()
+    {
+        using var fixture = new WorkspaceFixture();
+        var missing = new RepositoryInfo(Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing-startup"), "Missing");
+        var store = new JsonSettingsStore(fixture.SettingsPath);
+        await store.SaveAsync(new GitLlamaSettings([missing], missing.Path,
+            OpenRepositoryPaths: [missing.Path], AutoRefresh: false, LoadAvatars: false));
+        using var sessions = new RepositorySessionManager(new LibGitRepositoryReader(), new LibGitOverviewReader());
+        using var vm = new MainWindowViewModel(sessions, store, new GitWorkingTreeService());
+        await vm.Initialization;
+        Assert.Null(vm.SelectedRepository);
+        Assert.True(vm.IsRepositoryManagerSelected);
+        Assert.DoesNotContain(vm.RepositoryWorkspaceTabs, tab => tab.Repository?.Path == missing.Path);
+        Assert.Contains(vm.Repositories, repository => repository.Path == missing.Path);
+        Assert.Contains(missing.Path, vm.RepositoryOpenError);
+    }
+
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
@@ -529,6 +735,21 @@ public sealed class WorkspaceTests
         // Lines go into the output in the order they were ticked: B first, then A.
         resolver.Chunks[0].TakeTheirs = true;
         resolver.Chunks[0].TakeOurs = true;
+        var chosenOutput = resolver.OutputText;
+        vm.CloseConflictResolverCommand.Execute(null);
+        await vm.RefreshCommand.ExecuteAsync(null);
+        await vm.OpenConflictFileCommand.ExecuteAsync("a.txt");
+        Assert.Same(resolver, vm.ConflictResolver);
+        Assert.True(resolver.Chunks[0].TakeTheirs);
+        Assert.True(resolver.Chunks[0].TakeOurs);
+        Assert.Equal(chosenOutput, resolver.OutputText);
+        await vm.OpenConflictFileCommand.ExecuteAsync("b.txt");
+        var otherDraft = vm.ConflictResolver!;
+        otherDraft.Chunks[0].TakeOurs = true;
+        otherDraft.OutputText = "manual draft for b";
+        otherDraft.IsEditingOutput = true;
+        await vm.OpenConflictFileCommand.ExecuteAsync("a.txt");
+        Assert.Same(resolver, vm.ConflictResolver);
         await vm.SaveConflictResolutionCommand.ExecuteAsync(null);
 
         Assert.Equal(
@@ -536,6 +757,10 @@ public sealed class WorkspaceTests
             File.ReadAllText(Path.Combine(fixture.RepositoryPath, "a.txt")).Replace("\r\n", "\n")
         );
         Assert.Equal("b.txt", vm.ConflictResolver?.Path);
+        Assert.Same(otherDraft, vm.ConflictResolver);
+        Assert.Equal("manual draft for b", otherDraft.OutputText);
+        Assert.True(otherDraft.OutputEdited);
+        Assert.True(otherDraft.IsEditingOutput);
         Assert.Equal(["b.txt"], vm.ConflictedFiles.Select(file => file.Path));
         Assert.Contains(vm.ResolvedFiles, file => file.Path == "a.txt");
 
@@ -1858,6 +2083,14 @@ public sealed class WorkspaceTests
             var saved = await new JsonSettingsStore(fixture.SettingsPath).LoadAsync();
             Assert.Equal(privatePath, saved.SshPrivateKeyPath);
             Assert.Equal(privatePath + ".pub", saved.SshPublicKeyPath);
+            var puttyPublicPath = Path.Combine(directory, "putty-public.pub");
+            File.WriteAllText(puttyPublicPath,
+                "---- BEGIN SSH2 PUBLIC KEY ----\nComment: \"PuTTY public key\"\n"
+                + Convert.ToBase64String(keyData) + "\n---- END SSH2 PUBLIC KEY ----");
+            vm.SshPublicKeyPath = puttyPublicPath;
+            await WaitUntilAsync(() => vm.HasLoadedPublicKey);
+            Assert.Equal("ssh-ed25519 " + Convert.ToBase64String(keyData), vm.SshPublicKeyText);
+            Assert.Contains("SHA256:", vm.SshKeyFeedback);
             vm.SshPublicKeyPath = privatePath;
             await WaitUntilAsync(() => vm.SshKeyFeedback.Contains("private key"));
             Assert.Empty(vm.SshPublicKeyText);

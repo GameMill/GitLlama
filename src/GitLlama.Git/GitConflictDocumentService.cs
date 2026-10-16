@@ -33,6 +33,8 @@ public sealed record GitConflictDocument(
 )
 {
     public int ConflictCount => Segments.Count(segment => segment.IsConflict);
+    /// <summary>Identifies the exact index stages and operation behind a resolver draft.</summary>
+    public string SourceIdentity { get; init; } = "";
 }
 
 /// <summary>
@@ -100,7 +102,12 @@ public sealed class GitConflictDocumentService
                     segments,
                     lineEnding,
                     endsWithNewline
-                );
+                )
+                {
+                    SourceIdentity = string.Join("|", repository.Head.Tip?.Sha,
+                        repository.Info.CurrentOperation.ToString(), conflict.Ancestor?.Id.Sha,
+                        conflict.Ours?.Id.Sha, conflict.Theirs?.Id.Sha),
+                };
             },
             cancellationToken
         );

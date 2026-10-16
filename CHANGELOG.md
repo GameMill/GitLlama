@@ -2,7 +2,20 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-16
+
 - Initializing a repository lets you name its branch and, by default, makes a first commit with a README so the branch has history straight away; other files in the folder stay uncommitted. A repository with no commits yet still shows its current branch in the sidebar.
+- Speed up branch switching and large working-change lists by batching file updates, retaining unchanged rows, and reusing repository status instead of scanning twice.
+- Show an animated llama while starting the app and switching branches. Keep the loading screen up until the workspace and repository monitoring are ready, and avoid an extra refresh immediately afterwards.
+- Make sidebar categories vertically resizable, with a single divider grip, and keep their expand controls clear of the scrollbar.
+- Push tags reachable from the current branch along with its commits, including when the branch is already up to date. Refuse to overwrite existing remote tags.
+- Keep conflict selections, their insertion order, and manual output edits when leaving the resolver, switching files, or refreshing. Discard saved drafts when the underlying conflict changes.
+- Refuse to open missing or invalid repositories, show a clear error, and keep the current workspace. Skip missing repositories when restoring saved tabs.
+- Show persistent, dismissible error notifications for failed actions and missing required input. Group repeated errors and redact credentials from their messages.
+- Select the Inspector dock tab when opening working changes and the Repository dock tab when returning to History, including when both tools share a dock group.
+- Accept PuTTY SSH-2 public-key files as well as OpenSSH public keys. Copy PuTTY public keys in OpenSSH format for hosting providers; keep private keys out of the public-key display.
+- Add a red Discard all changes action to the commit inspector when changes exist and there are no conflicts or unfinished Git operations. Ask for confirmation before discarding staged edits, unstaged edits, and untracked files; preserve ignored files and nested repositories.
+
 ## 0.2.2 - 2026-10-14
 
 - Show where the current branch pushes and pulls in a push / pull picker next to the branch, with how far ahead and behind it is. Pick any branch on a remote, start a new branch on a remote, or stop tracking. Push, Pull and Fetch follow it (Push and Fetch use origin, or the only remote, until one is chosen), and their tooltips say exactly where they go. Pushing to a remote branch with a different name now works.

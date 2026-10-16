@@ -127,7 +127,7 @@ public partial class MainWindowViewModel
         }
         catch (Exception e)
         {
-            SubmoduleEditFeedback = SafeMessage(e);
+            SubmoduleEditFeedback = PresentError(e);
             Status = SubmoduleEditFeedback;
         }
         finally

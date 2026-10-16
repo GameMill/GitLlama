@@ -89,7 +89,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _hostingCommentRevision))
             {
-                HostingStatus = SafeMessage(e);
+                HostingStatus = PresentError(e);
             }
         }
     }
@@ -166,7 +166,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _hostingRevision))
             {
-                HostingStatus = "Could not reach GitHub: " + SafeMessage(e);
+                HostingStatus = "Could not reach GitHub: " + PresentError(e);
             }
         }
         finally
@@ -200,7 +200,7 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _hostingRevision))
             {
-                HostingStatus = SafeMessage(e);
+                HostingStatus = PresentError(e);
             }
         }
         finally

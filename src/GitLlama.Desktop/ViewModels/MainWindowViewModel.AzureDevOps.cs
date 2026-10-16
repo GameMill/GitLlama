@@ -258,7 +258,7 @@ public partial class MainWindowViewModel
         }
         catch (ArgumentException e)
         {
-            AzureOrganizationFeedback = e.Message;
+            AzureOrganizationFeedback = PresentError(e);
             return;
         }
 

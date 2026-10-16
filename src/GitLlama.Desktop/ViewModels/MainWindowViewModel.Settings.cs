@@ -92,7 +92,7 @@ public partial class MainWindowViewModel : IDisposable
         {
             if (revision == Interlocked.Read(ref _watcherRevision))
             {
-                Status = "Automatic refresh unavailable: " + SafeMessage(e);
+                Status = "Automatic refresh unavailable: " + PresentError(e);
             }
         }
     }

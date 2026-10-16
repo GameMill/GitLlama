@@ -300,7 +300,7 @@ public partial class MainWindowViewModel
         {
             if (version == Interlocked.Read(ref _repositorySelectionVersion))
             {
-                Status = SafeMessage(e);
+                Status = PresentError(e);
             }
         }
         finally
@@ -358,7 +358,7 @@ public partial class MainWindowViewModel
         }
         catch (InvalidOperationException e)
         {
-            Status = SafeMessage(e);
+            Status = PresentError(e);
             return null;
         }
     }
