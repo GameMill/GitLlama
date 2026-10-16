@@ -30,6 +30,9 @@ public partial class RepositoryCreationDialog : Window
             ? "Enter the Git URL and choose a new or empty local folder."
             : "Choose a new or existing project folder. Your files will be preserved.";
         CloneFields.IsVisible = Credentials.IsVisible = clone;
+        InitializeFields.IsVisible = !clone;
+        vm.NewRepositoryBranch = "main";
+        vm.NewRepositoryInitialCommit = true;
         Submit.Content = clone ? "Clone repository" : "Initialize repository";
         Closing += (_, e) =>
         {

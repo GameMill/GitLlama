@@ -121,6 +121,12 @@ public partial class MainWindowViewModel
         }
     }
 
+    private string? ProfileOrGitIdentityName() =>
+        string.IsNullOrWhiteSpace(ActiveProfile?.AuthorName) ? null : ActiveProfile.AuthorName;
+
+    private string? ProfileOrGitIdentityEmail() =>
+        string.IsNullOrWhiteSpace(ActiveProfile?.AuthorEmail) ? null : ActiveProfile.AuthorEmail;
+
     private void ApplyProfileIdentity()
     {
         var profile = ActiveProfile;

@@ -39,6 +39,14 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private string newRepositoryDestination = "";
 
+    /// <summary>The branch a new repository starts on.</summary>
+    [ObservableProperty]
+    private string newRepositoryBranch = "main";
+
+    /// <summary>Whether a new repository gets a first commit with a README, so its branch exists straight away.</summary>
+    [ObservableProperty]
+    private bool newRepositoryInitialCommit = true;
+
     [ObservableProperty]
     private string worktreeName = "";
 
@@ -337,14 +345,25 @@ public partial class MainWindowViewModel
         IsFeatureBusy = true;
         try
         {
-            RepositoryPath = await new GitRepositoryLifecycleService().InitializeAsync(NewRepositoryDestination);
+            var created = await new GitRepositoryLifecycleService().InitializeAsync(
+                NewRepositoryDestination,
+                NewRepositoryBranch,
+                NewRepositoryInitialCommit,
+                ProfileOrGitIdentityName(),
+                ProfileOrGitIdentityEmail()
+            );
+            RepositoryPath = created.Path;
             await AddRepositoryCommand.ExecuteAsync(null);
             RepositoryCreationSucceeded =
                 string.IsNullOrWhiteSpace(RepositoryPath)
                 && SelectedRepository?.Path == Path.GetFullPath(NewRepositoryDestination.Trim());
             if (RepositoryCreationSucceeded)
             {
-                Status = "Repository initialized.";
+                Status =
+                    created.Committed ? "Repository initialized with a first commit."
+                    : NewRepositoryInitialCommit
+                        ? "Repository initialized. Set your name and email in Settings to make the first commit."
+                    : "Repository initialized. Make a first commit to create the branch.";
             }
         }
         catch (Exception e)

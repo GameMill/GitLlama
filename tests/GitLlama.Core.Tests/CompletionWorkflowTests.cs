@@ -11,11 +11,38 @@ public sealed class CompletionWorkflowTests
     {
         using var fixture = new Fixture();
         var service = new GitRepositoryLifecycleService();
-        var initialized = await service.InitializeAsync(Path.Combine(fixture.Root, "initialized"));
+        var initialized = (await service.InitializeAsync(Path.Combine(fixture.Root, "initialized"))).Path;
         using (var repo = new Repository(initialized))
         {
             Assert.Equal("main", repo.Head.FriendlyName);
         }
+
+        // The current branch is listed even before its first commit.
+        Assert.Equal(["main"], (await new LibGitOverviewReader().ReadOverviewAsync(initialized)).Branches);
+
+        // With a first commit, the branch exists straight away and the README is the only file committed.
+        var committedPath = Path.Combine(fixture.Root, "committed");
+        Directory.CreateDirectory(committedPath);
+        File.WriteAllText(Path.Combine(committedPath, "notes.txt"), "keep me out of the first commit");
+        var committed = await service.InitializeAsync(
+            committedPath,
+            "trunk",
+            initialCommit: true,
+            authorName: "Test",
+            authorEmail: "test@example.invalid"
+        );
+        Assert.True(committed.Committed);
+        using (var repo = new Repository(committed.Path))
+        {
+            Assert.Equal("trunk", repo.Head.FriendlyName);
+            Assert.Equal(["README.md"], repo.Head.Tip.Tree.Select(entry => entry.Name));
+            Assert.Equal("test@example.invalid", repo.Head.Tip.Author.Email);
+            Assert.Equal(FileStatus.NewInWorkdir, repo.RetrieveStatus("notes.txt"));
+        }
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.InitializeAsync(Path.Combine(fixture.Root, "bad"), "bad name")
+        );
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.InitializeAsync(fixture.Path));
         var clone = await service.CloneAsync(fixture.Path, Path.Combine(fixture.Root, "clone"));
@@ -192,7 +219,9 @@ public sealed class CompletionWorkflowTests
     public async Task EmptyRepositorySupportsHistoryFilesAndReflog()
     {
         using var fixture = new Fixture();
-        var path = await new GitRepositoryLifecycleService().InitializeAsync(Path.Combine(fixture.Root, "empty"));
+        var path = (
+            await new GitRepositoryLifecycleService().InitializeAsync(Path.Combine(fixture.Root, "empty"))
+        ).Path;
         Assert.Empty((await new GitCommitGraphService().GetPageAsync(path)).Commits);
         Assert.Empty(await new GitFileBrowserService().ListAsync(path));
         Assert.Empty(await new GitReflogService().ListAsync(path));

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Initializing a repository lets you name its branch and, by default, makes a first commit with a README so the branch has history straight away; other files in the folder stay uncommitted. A repository with no commits yet still shows its current branch in the sidebar.
 ## 0.2.2 - 2026-10-14
 
 - Show where the current branch pushes and pulls in a push / pull picker next to the branch, with how far ahead and behind it is. Pick any branch on a remote, start a new branch on a remote, or stop tracking. Push, Pull and Fetch follow it (Push and Fetch use origin, or the only remote, until one is chosen), and their tooltips say exactly where they go. Pushing to a remote branch with a different name now works.

@@ -2,19 +2,63 @@ using LibGit2Sharp;
 
 namespace GitLlama.Git;
 
+/// <summary>A newly initialized repository, and whether its initial commit was made.</summary>
+public sealed record GitInitializedRepository(string Path, bool Committed);
+
 public sealed class GitRepositoryLifecycleService
 {
-    public Task<string> InitializeAsync(string path, CancellationToken cancellationToken = default) =>
+    /// <summary>
+    /// Creates a repository on <paramref name="branch"/> (main by default). With <paramref name="initialCommit"/>,
+    /// it also commits a README (created if the folder has none) so the branch exists straight away; other files in
+    /// the folder are left for you to review and commit. The commit uses the given identity, or Git's configured one,
+    /// and is skipped when neither is set (see <see cref="GitInitializedRepository.Committed"/>).
+    /// </summary>
+    public Task<GitInitializedRepository> InitializeAsync(
+        string path,
+        string branch = "main",
+        bool initialCommit = false,
+        string? authorName = null,
+        string? authorEmail = null,
+        CancellationToken cancellationToken = default
+    ) =>
         Task.Run(
             () =>
             {
+                branch = string.IsNullOrWhiteSpace(branch) ? "main" : branch.Trim();
+                if (!Reference.IsValidName("refs/heads/" + branch))
+                {
+                    throw new InvalidOperationException($"'{branch}' isn't a valid branch name.");
+                }
+
                 var target = ValidateDestination(path, allowExistingFiles: true);
                 cancellationToken.ThrowIfCancellationRequested();
                 Repository.Init(target);
                 using var repository = new Repository(target);
                 // A predictable initial branch on all platforms.
-                repository.Refs.UpdateTarget("HEAD", "refs/heads/main");
-                return target;
+                repository.Refs.UpdateTarget("HEAD", "refs/heads/" + branch);
+                if (!initialCommit)
+                {
+                    return new GitInitializedRepository(target, false);
+                }
+
+                var signature =
+                    !string.IsNullOrWhiteSpace(authorName) && !string.IsNullOrWhiteSpace(authorEmail)
+                        ? new Signature(authorName.Trim(), authorEmail.Trim(), DateTimeOffset.Now)
+                        : repository.Config.BuildSignature(DateTimeOffset.Now);
+                if (signature is null)
+                {
+                    return new GitInitializedRepository(target, false);
+                }
+
+                var readme = Path.Combine(target, "README.md");
+                if (!File.Exists(readme))
+                {
+                    File.WriteAllText(readme, "# " + new DirectoryInfo(target).Name + Environment.NewLine);
+                }
+
+                Commands.Stage(repository, "README.md");
+                repository.Commit("Initial commit", signature, signature);
+                return new GitInitializedRepository(target, true);
             },
             cancellationToken
         );

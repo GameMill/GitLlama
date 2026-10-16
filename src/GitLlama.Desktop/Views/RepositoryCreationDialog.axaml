@@ -36,6 +36,22 @@
                     Click="Browse_Click" />
         </Grid>
 
+        <StackPanel x:Name="InitializeFields" Spacing="8">
+            <TextBlock Text="Branch" Classes="section" />
+
+            <TextBox x:Name="InitialBranch"
+                     Text="{Binding NewRepositoryBranch}"
+                     Watermark="main" />
+
+            <CheckBox x:Name="InitialCommit"
+                      Content="Create a first commit with a README"
+                      IsChecked="{Binding NewRepositoryInitialCommit}" />
+
+            <TextBlock Text="With a first commit the branch has history straight away, ready to push. Other files in the folder stay uncommitted for you to review."
+                       Classes="muted"
+                       TextWrapping="Wrap" />
+        </StackPanel>
+
         <Expander x:Name="Credentials"
                   Classes="navigation"
                   Header="Private repository credentials (optional)">

@@ -30,11 +30,14 @@ public sealed class LibGitOverviewReader : IRepositoryOverviewReader
                         .ToArray();
 
                 cancellationToken.ThrowIfCancellationRequested();
-                var branches = GitDisplayReferences
-                    .Branches(repo)
-                    .Select(branch => branch.FriendlyName)
-                    .OrderBy(name => name, StringComparer.Ordinal)
-                    .ToArray();
+                var names = GitDisplayReferences.Branches(repo).Select(branch => branch.FriendlyName).ToList();
+                // A new repository's branch has no commit yet, so Git doesn't list it; show it anyway.
+                if (repo.Info.IsHeadUnborn && !names.Contains(repo.Head.FriendlyName))
+                {
+                    names.Add(repo.Head.FriendlyName);
+                }
+
+                var branches = names.OrderBy(name => name, StringComparer.Ordinal).ToArray();
 
                 return new RepositoryOverview(commits, changes, branches, repo.Info.CurrentOperation.ToString());
             },
