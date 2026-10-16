@@ -20,7 +20,7 @@
             BorderThickness="1"
             Background="{StaticResource SurfaceBrush}">
         <Grid>
-            <DockPanel Background="{StaticResource SurfaceBrush}" IsEnabled="{Binding !IsSettingsOpen}">
+            <DockPanel x:Name="WorkspaceContent" Background="{StaticResource SurfaceBrush}" IsEnabled="{Binding IsWorkspaceInteractive}">
                 <DockPanel.KeyBindings>
                     <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
                     <KeyBinding Gesture="Ctrl+Enter" Command="{Binding CommitCommand}" />
@@ -558,6 +558,9 @@
                                           IsVisible="{Binding IsRepositoryManagerSelected}" />
                 </Grid>
             </DockPanel>
+
+            <views:BranchSwitchView x:Name="BranchSwitchOverlay"
+                                    IsVisible="{Binding IsLoading}" />
 
             <Grid x:Name="SettingsOverlay"
                   IsVisible="{Binding IsSettingsOpen}"

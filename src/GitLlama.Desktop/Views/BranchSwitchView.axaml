@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:GitLlama.Desktop.Controls"
+             x:Class="GitLlama.Desktop.Views.BranchSwitchView">
+    <UserControl.Styles>
+        <Style Selector="controls|LlamaIcon.pronking">
+            <Style.Animations>
+                <Animation Duration="0:0:0.9" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="TranslateTransform.Y" Value="0" /><Setter Property="RotateTransform.Angle" Value="0" /></KeyFrame>
+                    <KeyFrame Cue="20%"><Setter Property="TranslateTransform.Y" Value="3" /><Setter Property="RotateTransform.Angle" Value="-4" /></KeyFrame>
+                    <KeyFrame Cue="48%"><Setter Property="TranslateTransform.Y" Value="-19" /><Setter Property="RotateTransform.Angle" Value="5" /></KeyFrame>
+                    <KeyFrame Cue="76%"><Setter Property="TranslateTransform.Y" Value="0" /><Setter Property="RotateTransform.Angle" Value="-3" /></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="TranslateTransform.Y" Value="0" /><Setter Property="RotateTransform.Angle" Value="0" /></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+    <Border Background="#A6000000">
+        <Border Width="360"
+                Padding="28,24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#2B2D31"
+                BorderBrush="#454951"
+                BorderThickness="1"
+                CornerRadius="12">
+            <StackPanel Spacing="10">
+                <Grid Height="134" Margin="0,4,0,8">
+                    <Ellipse Width="82" Height="10" Fill="#1E1F22"
+                             HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,1" />
+                    <controls:LlamaIcon Width="96" Height="96"
+                                        HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"
+                                        RenderTransformOrigin="50%,100%"
+                                        Classes.pronking="{Binding IsLoading}" />
+                </Grid>
+                <TextBlock Text="{Binding LoadingTitle}" FontSize="19" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding LoadingTarget}" Foreground="#A9C2E3"
+                           TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding LoadingTarget}" />
+                <TextBlock Text="Getting your workspace ready…" Classes="muted"
+                           HorizontalAlignment="Center" Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+    </Border>
+</UserControl>

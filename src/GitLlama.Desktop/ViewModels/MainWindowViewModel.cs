@@ -1207,8 +1207,16 @@ public partial class MainWindowViewModel : ObservableObject
                 NewRepositoryTab();
             }
 
-            _loadingSettings = false;
-            _initialized = true;
+            try
+            {
+                await _repositoryActivation;
+            }
+            finally
+            {
+                _loadingSettings = false;
+                _initialized = true;
+                IsStarting = false;
+            }
         }
     }
 
@@ -1257,6 +1265,7 @@ public partial class MainWindowViewModel : ObservableObject
         LocalIdentityEmail = "";
         if (value is null)
         {
+            _repositoryActivation = Task.CompletedTask;
             CurrentBranch = "No repository";
             CommitLines.Clear();
             ChangeLines.Clear();
@@ -1265,7 +1274,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         else
         {
-            _ = ActivateAsync(value, version);
+            _repositoryActivation = ActivateAsync(value, version);
         }
 
         if (!_loadingSettings)
@@ -2049,6 +2058,8 @@ public partial class MainWindowViewModel : ObservableObject
             var localName = string.IsNullOrWhiteSpace(RemoteLocalBranchName)
                 ? remoteBranch.BranchName
                 : RemoteLocalBranchName.Trim();
+            BranchSwitchTarget = localName;
+            IsBranchSwitching = true;
             await _branches.CheckoutRemoteBranchAsync(
                 repo.Path,
                 remoteBranch.RemoteName,
@@ -2074,6 +2085,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
+            IsBranchSwitching = false;
             _gitMutationLock.Release();
         }
     }
@@ -3723,6 +3735,8 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
+            BranchSwitchTarget = name;
+            IsBranchSwitching = true;
             var current = await _branches.CheckoutAsync(repo.Path, name);
             if (version != Interlocked.Read(ref _repositorySelectionVersion))
             {
@@ -3743,6 +3757,7 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
+            IsBranchSwitching = false;
             _gitMutationLock.Release();
         }
     }

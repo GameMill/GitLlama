@@ -36,6 +36,112 @@ public static class TestAppBuilder
 
 public sealed class WorkspaceTests
 {
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task StartupOverlayWaitsForSavedRepositoryAndClearsAfterFailure(bool fail)
+    {
+        using var fixture = new WorkspaceFixture();
+        var reader = new PausedStartupReader(fail);
+        using var sessions = new RepositorySessionManager(reader, new LibGitOverviewReader());
+        var store = new JsonSettingsStore(fixture.SettingsPath);
+        await store.SaveAsync(new GitLlamaSettings(
+            [new RepositoryInfo(fixture.RepositoryPath, "StoneForge")], fixture.RepositoryPath,
+            AutoRefresh: false, LoadAvatars: false));
+        using var vm = new MainWindowViewModel(sessions, store, new GitWorkingTreeService());
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            await WaitUntilAsync(() => reader.Entered);
+            Assert.True(vm.IsStarting);
+            Assert.False(vm.Initialization.IsCompleted);
+            Assert.False(vm.IsWorkspaceInteractive);
+            Assert.Equal("Starting GitLlama", vm.LoadingTitle);
+            Assert.True(window.FindControl<BranchSwitchView>("BranchSwitchOverlay")!.IsVisible);
+            SavePreview(window, "startup-llama.png");
+            reader.Release.TrySetResult();
+            await vm.Initialization;
+            Assert.False(vm.IsStarting);
+            Assert.False(vm.IsLoading);
+            Assert.True(vm.IsWorkspaceInteractive);
+            Assert.False(window.FindControl<BranchSwitchView>("BranchSwitchOverlay")!.IsVisible);
+            if (fail)
+                Assert.Contains("Startup repository unavailable", vm.Status);
+            else
+                Assert.NotEmpty(vm.HistoryRows);
+        }
+        finally
+        {
+            reader.Release.TrySetResult();
+            await vm.Initialization;
+            window.Close();
+        }
+    }
+
+    private sealed class PausedStartupReader(bool fail) : IRepositoryReader
+    {
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool Entered { get; private set; }
+        public bool IsRepository(string path) => Repository.IsValid(path);
+        public async Task<RepositorySnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+        {
+            Entered = true;
+            await Release.Task.WaitAsync(cancellationToken);
+            if (fail)
+                throw new IOException("Startup repository unavailable");
+            return await new LibGitRepositoryReader().ReadAsync(path, cancellationToken);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task BranchSwitchOverlayShowsLlamaAndAlwaysRestoresWorkspace()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            vm.BranchSwitchTarget = "feature/authentication";
+            vm.IsBranchSwitching = true;
+            Dispatcher.UIThread.RunJobs();
+            var overlay = window.FindControl<BranchSwitchView>("BranchSwitchOverlay")!;
+            Assert.True(overlay.IsVisible);
+            Assert.False(window.FindControl<DockPanel>("WorkspaceContent")!.IsEnabled);
+            Assert.Single(overlay.GetVisualDescendants().OfType<GitLlama.Desktop.Controls.LlamaIcon>());
+            SavePreview(window, "branch-switch-llama.png");
+            vm.IsBranchSwitching = false;
+            await new GitBranchService().CreateAsync(fixture.RepositoryPath, "llama-checkout");
+            var transitions = new List<bool>();
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(vm.IsBranchSwitching))
+                    transitions.Add(vm.IsBranchSwitching);
+            };
+            vm.SelectedBranchLine = "llama-checkout";
+            await vm.CheckoutBranchCommand.ExecuteAsync(null);
+            Assert.Equal("llama-checkout", vm.CurrentBranch);
+            Assert.Equal("llama-checkout", vm.BranchSwitchTarget);
+            Assert.Equal(new[] { true, false }, transitions);
+            Assert.False(overlay.IsVisible);
+            Assert.True(vm.IsWorkspaceInteractive);
+
+            transitions.Clear();
+            vm.SelectedBranchLine = "missing-branch";
+            await vm.CheckoutBranchCommand.ExecuteAsync(null);
+            Assert.Equal(new[] { true, false }, transitions);
+            Assert.False(vm.IsBranchSwitching);
+            Assert.Contains("does not exist", vm.Status);
+            Assert.True(window.FindControl<DockPanel>("WorkspaceContent")!.IsEnabled);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     [AvaloniaFact]
     public async Task LargeWorkingChangeRefreshBatchesListsAndPreservesUnchangedRows()
     {
