@@ -198,10 +198,10 @@ public sealed partial class GitRemoteService
             cancellationToken
         );
 
-    /// <summary>Pushes the current local branch without force-updating remote history.</summary>
     /// <summary>
     /// Pushes the checked-out branch to <paramref name="remoteName"/>, to the branch of the same name unless
-    /// <paramref name="remoteBranchName"/> says otherwise. Sets the upstream when the branch doesn't have one yet.
+    /// <paramref name="remoteBranchName"/> says otherwise, along with tags on its history. Sets the upstream when
+    /// the branch doesn't have one yet. Existing remote tags are never force-updated.
     /// </summary>
     public Task<string> PushCurrentBranchAsync(
         string repositoryPath,
@@ -232,6 +232,15 @@ public sealed partial class GitRemoteService
                     "refs/heads/"
                     + (string.IsNullOrWhiteSpace(remoteBranchName) ? branch.FriendlyName : remoteBranchName.Trim());
                 var refspec = $"{branch.CanonicalName}:{destination}";
+                var refspecs = new List<string> { refspec };
+                var tags = repository.Tags.ToArray();
+                if (tags.Length > 0)
+                {
+                    var history = repository.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = branch.Tip })
+                        .Select(commit => commit.Sha).ToHashSet(StringComparer.Ordinal);
+                    refspecs.AddRange(tags.Where(tag => tag.PeeledTarget is Commit commit && history.Contains(commit.Sha))
+                        .Select(tag => $"{tag.CanonicalName}:{tag.CanonicalName}"));
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 if (GitLfsService.UsesLfs(repository))
                 {
@@ -291,7 +300,7 @@ public sealed partial class GitRemoteService
                     GitSystemTransport
                         .RunAsync(
                             repositoryPath,
-                            ["push", "--", remote.Name, refspec],
+                            new[] { "push", "--", remote.Name }.Concat(refspecs).ToArray(),
                             network ?? new GitNetworkOptions(),
                             cancellationToken,
                             ssh: GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url),
@@ -303,10 +312,26 @@ public sealed partial class GitRemoteService
                 else
                 {
                     var rejected = new List<PushStatusError>();
+                    var pushOptions = (network ?? new GitNetworkOptions()).Push(cancellationToken, rejected.Add);
+                    pushOptions.OnNegotiationCompletedBeforePush = updates =>
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        foreach (var update in updates)
+                        {
+                            if (update.DestinationRefName.StartsWith("refs/tags/", StringComparison.Ordinal)
+                                && update.SourceObjectId != ObjectId.Zero
+                                && update.SourceObjectId != update.DestinationObjectId)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Remote tag '{update.DestinationRefName[10..]}' already points to a different object. Push canceled; existing tags were preserved.");
+                            }
+                        }
+                        return true;
+                    };
                     repository.Network.Push(
                         remote,
-                        refspec,
-                        (network ?? new GitNetworkOptions()).Push(cancellationToken, rejected.Add)
+                        refspecs,
+                        pushOptions
                     );
                     if (rejected.Count > 0)
                     {

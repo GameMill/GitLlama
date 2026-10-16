@@ -1922,7 +1922,7 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            Status = $"Pushing current branch to {remote.Name}...";
+            Status = $"Pushing current branch and its tags to {remote.Name}...";
             RemoteOperationFeedback = Status;
             IsNetworkBusy = true;
             if (
@@ -1954,7 +1954,7 @@ public partial class MainWindowViewModel : ObservableObject
 
             MarkLfsLocksStale();
             await RefreshAsync();
-            Status = RemoteOperationFeedback = $"Pushed {branch} to {remote.Name}/{remoteBranch ?? branch}.";
+            Status = RemoteOperationFeedback = $"Pushed {branch} and its tags to {remote.Name}/{remoteBranch ?? branch}.";
         }
         catch (Exception e)
         {

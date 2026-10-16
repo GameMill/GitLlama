@@ -417,6 +417,80 @@ public sealed class GitRemoteServiceTests
     }
 
     [Fact]
+    public async Task PushIncludesHistoryTagsEvenWhenBranchIsAlreadyPushedAndRejectsTagReplacement()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "gitllama-push-tags-" + Guid.NewGuid().ToString("N"));
+        var localPath = Path.Combine(root, "local");
+        var remotePath = Path.Combine(root, "remote.git");
+        Directory.CreateDirectory(localPath);
+        try
+        {
+            Repository.Init(localPath);
+            Repository.Init(remotePath, isBare: true);
+            var signature = new Signature("Test", "test@example.invalid", DateTimeOffset.UtcNow);
+            string initialSha;
+            using (var local = new Repository(localPath))
+            {
+                File.WriteAllText(Path.Combine(localPath, "readme.txt"), "initial");
+                Commands.Stage(local, "readme.txt");
+                initialSha = local.Commit("Initial", signature, signature).Sha;
+                local.Network.Remotes.Add("origin", remotePath);
+                local.ApplyTag("lightweight");
+                local.ApplyTag("annotated", signature, "Release");
+                var main = local.Head;
+                Commands.Checkout(local, local.CreateBranch("other"));
+                File.WriteAllText(Path.Combine(localPath, "readme.txt"), "other");
+                Commands.Stage(local, "readme.txt");
+                local.Commit("Other branch", signature, signature);
+                local.ApplyTag("unrelated");
+                Commands.Checkout(local, main);
+            }
+
+            var service = new GitRemoteService();
+            await service.PushCurrentBranchAsync(localPath, "origin");
+            using (var remote = new Repository(remotePath))
+            {
+                Assert.Equal(initialSha, remote.Tags["lightweight"].Target.Sha);
+                Assert.NotNull(remote.Tags["annotated"].Annotation);
+                Assert.Equal(initialSha, remote.Tags["annotated"].PeeledTarget.Sha);
+                Assert.Null(remote.Tags["unrelated"]);
+            }
+
+            using (var local = new Repository(localPath))
+            {
+                local.ApplyTag("after-push");
+            }
+            await service.PushCurrentBranchAsync(localPath, "origin");
+            using (var remote = new Repository(remotePath))
+            {
+                Assert.Equal(initialSha, remote.Tags["after-push"].Target.Sha);
+            }
+
+            using (var local = new Repository(localPath))
+            {
+                local.Tags.Remove("lightweight");
+                File.WriteAllText(Path.Combine(localPath, "readme.txt"), "next");
+                Commands.Stage(local, "readme.txt");
+                local.Commit("Next", signature, signature);
+                local.ApplyTag("lightweight");
+            }
+            await Assert.ThrowsAnyAsync<Exception>(() => service.PushCurrentBranchAsync(localPath, "origin"));
+            using (var remote = new Repository(remotePath))
+            {
+                Assert.Equal(initialSha, remote.Tags["lightweight"].Target.Sha);
+            }
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void PushCallbacksNeverIgnoreRemoteRejections()
     {
         var error = new RejectedPushStatus();
