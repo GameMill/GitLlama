@@ -2152,7 +2152,7 @@ public sealed class WorkspaceTests
         Assert.Equal("GitLlama", vm.SelectedRemote!.Name);
         var branchName = vm.CurrentBranch;
         await vm.PushRemoteCommand.ExecuteAsync(null);
-        Assert.Contains("Pushed " + branchName + " to GitLlama/" + branchName, vm.RemoteOperationFeedback);
+        Assert.Contains("Pushed " + branchName + " and its tags to GitLlama/" + branchName, vm.RemoteOperationFeedback);
         using (var remote = new Repository(remotePath))
         using (var local = new Repository(fixture.RepositoryPath))
         {
