@@ -176,6 +176,7 @@ public partial class MainWindowViewModel : IDisposable
         _githubConnectionCancellation?.Cancel();
         _githubConnectionCancellation?.Dispose();
         _azurePersonalAccessTokens.Clear();
+        ClearAzureOAuthMemory();
         AzurePatInput = "";
         if (_ownsHostingProvider && _hostingProvider is IDisposable provider)
         {

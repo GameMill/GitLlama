@@ -14,11 +14,12 @@ public sealed class GitNetworkOptions
     public string Secret { get; init; } = "";
     public string CredentialHost { get; init; } = "";
     public string AzurePersonalAccessToken { get; init; } = "";
+    public Func<CancellationToken, Task<string>>? AzureOAuthTokenProvider { get; init; }
     public IReadOnlyCollection<string>? AllowedAzureOrganizations { get; init; }
     public string AzureCredentialScopeUrl { get; init; } = "";
 
     public bool UsesAzureToken(string url) =>
-        !string.IsNullOrEmpty(AzurePersonalAccessToken)
+        (!string.IsNullOrEmpty(AzurePersonalAccessToken) || AzureOAuthTokenProvider is not null)
         && GitLlama.Core.AzureDevOpsRemote.Parse(url) is { } target
         && GitLlama.Core.AzureDevOpsRemote.BearerScope(url, target.Organization) == AzureCredentialScopeUrl;
 
@@ -39,14 +40,14 @@ public sealed class GitNetworkOptions
         if (!AllowedAzureOrganizations.Contains(target.Organization, StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                "GitLlama access to this Azure DevOps organization is not connected. Add its personal access token in Settings > Integrations."
+                "GitLlama access to this Azure DevOps organization is not connected. Allow the organization through Microsoft sign-in or add its personal access token in Settings > Integrations."
             );
         }
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https" && !UsesAzureToken(url))
         {
             throw new InvalidOperationException(
-                "Connect an Azure DevOps personal access token before accessing this organization."
+                "Connect an Azure DevOps account or personal access token before accessing this organization."
             );
         }
     }
@@ -115,7 +116,7 @@ public sealed class GitNetworkOptions
             );
         }
 
-        if (UsesAzureToken(url) && (types & SupportedCredentialTypes.UsernamePassword) != 0)
+        if (UsesAzureToken(url) && !string.IsNullOrEmpty(AzurePersonalAccessToken) && (types & SupportedCredentialTypes.UsernamePassword) != 0)
         {
             _credentialSupplied = true;
             return new UsernamePasswordCredentials { Username = "GitLlama", Password = AzurePersonalAccessToken };

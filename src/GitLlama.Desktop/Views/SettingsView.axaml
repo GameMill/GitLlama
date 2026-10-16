@@ -522,52 +522,107 @@
                                     <Border Background="#292C32"
                                             CornerRadius="5"
                                             Padding="14">
-                                        <TextBlock Text="Microsoft's newer Entra OAuth integration does not currently support personal Microsoft accounts (MSA) for Azure DevOps. GitLlama uses personal access tokens for Azure connections."
+                                        <TextBlock Text="Use Microsoft sign-in for organizations connected to an Entra directory. Personal accounts need membership or guest access in that directory. Personal access tokens remain available for every organization."
                                                    Classes="muted"
                                                    TextWrapping="Wrap" />
                                     </Border>
 
-                                    <TextBlock Text="Connect an organization"
-                                               FontSize="16"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Text="Organization name or URL" Classes="muted" />
-
-                                    <TextBox x:Name="AzureOrganizationInput"
-                                             Text="{Binding AzureOrganizationInput}"
-                                             Watermark="https://dev.azure.com/your-organization"
-                                             IsEnabled="{Binding !IsAuthenticationBusy}" />
-
-                                    <TextBlock Text="Personal access token" Classes="muted" />
-
-                                    <TextBox x:Name="AzurePatInput"
-                                             Text="{Binding AzurePatInput}"
-                                             PasswordChar="●"
-                                             Watermark="Paste your organization’s token"
-                                             IsEnabled="{Binding !IsAuthenticationBusy}" />
-
-                                    <TextBlock Text="Choose Code (Read) to browse, clone and fetch. Choose Code (Read &amp; write) if you also want to push. Add each organization separately; reconnect to replace its token."
-                                               Classes="muted"
-                                               TextWrapping="Wrap" />
-
+                                    <TextBlock Text="Microsoft sign-in"
+                                               FontSize="16" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding AzureOAuthStatus}" TextWrapping="Wrap" />
                                     <WrapPanel ItemSpacing="8" LineSpacing="8">
-                                        <Button x:Name="AzurePatConnectButton"
-                                                Classes="workspace primary"
-                                                Content="Connect with token"
-                                                Command="{Binding ConnectAzurePatCommand}"
+                                        <Button x:Name="AzureSignInButton" Classes="workspace primary"
+                                                Content="Sign in with Microsoft" Command="{Binding ConnectAzureOAuthCommand}"
+                                                IsVisible="{Binding !IsAzureOAuthConnected}" IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                        <Button Classes="workspace" Content="Switch account"
+                                                Command="{Binding ConnectAzureOAuthCommand}" IsVisible="{Binding IsAzureOAuthConnected}"
                                                 IsEnabled="{Binding !IsAuthenticationBusy}" />
-
-                                        <Button Classes="workspace"
-                                                Content="Create / manage tokens…"
-                                                Command="{Binding OpenAzureTokenPageCommand}" />
-
-                                        <Button Classes="workspace"
-                                                Content="Cancel"
-                                                Command="{Binding CancelAuthenticationCommand}"
-                                                IsVisible="{Binding IsAuthenticationBusy}" />
+                                        <Button Classes="workspace toolbar" Content="Disconnect Microsoft"
+                                                Command="{Binding DisconnectAzureOAuthCommand}" IsVisible="{Binding IsAzureOAuthConnected}"
+                                                IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                        <Button Classes="workspace" Content="Cancel sign-in"
+                                                Command="{Binding CancelAuthenticationCommand}" IsVisible="{Binding HasAzureOAuthCode}" />
                                     </WrapPanel>
+                                    <Border Classes="card" IsVisible="{Binding HasAzureOAuthCode}">
+                                        <StackPanel Spacing="8">
+                                            <TextBlock Text="Enter this code on Microsoft's sign-in page:" TextWrapping="Wrap" />
+                                            <TextBlock Text="https://microsoft.com/devicelogin" Classes="muted" />
+                                            <SelectableTextBlock Text="{Binding AzureOAuthUserCode}" FontSize="24" FontWeight="SemiBold" />
+                                            <WrapPanel ItemSpacing="8">
+                                                <Button Classes="workspace" Content="Copy code" Click="CopyAzureOAuthCode_Click" />
+                                                <Button Classes="workspace" Content="Open sign-in page" Command="{Binding OpenAzureOAuthPageCommand}" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <TextBlock Text="{Binding AzureOAuthFeedback}" TextWrapping="Wrap" />
+                                    <StackPanel IsVisible="{Binding IsAzureOAuthConnected}" Spacing="10">
+                                        <DockPanel>
+                                            <Button DockPanel.Dock="Right" Classes="workspace toolbar" Content="Refresh organizations"
+                                                    Command="{Binding RefreshAzureOAuthOrganizationsCommand}" IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                            <TextBlock Text="Organization access" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        </DockPanel>
+                                        <TextBlock Text="Allow or revoke GitLlama's use of each organization. Microsoft consent, directory membership, and any personal access token connection stay separate."
+                                                   Classes="muted" TextWrapping="Wrap" />
+                                        <ItemsControl x:Name="AzureOAuthOrganizationList" ItemsSource="{Binding AzureOAuthOrganizations}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" Margin="0,5">
+                                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                        <Button Grid.Column="1" Classes="workspace" Content="{Binding Action}"
+                                                                Tag="{Binding}" Click="ToggleAzureOAuthOrganization_Click" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                    <Border BorderBrush="#454951" BorderThickness="0,1,0,0" />
+                                    <Expander x:Name="AzurePatExpander"
+                                              Classes="navigation"
+                                              Header="Personal access token (deprecated)"
+                                              IsExpanded="False">
+                                        <StackPanel Spacing="12" Margin="0,12,0,0">
+                                            <TextBlock Text="Deprecated in GitLlama. Use Microsoft sign-in for new connections. Existing personal access tokens remain supported."
+                                                       Classes="muted" TextWrapping="Wrap" />
 
-                                    <TextBlock Text="{Binding AzureOrganizationFeedback}" TextWrapping="Wrap" />
+                                            <TextBlock Text="Organization name or URL" Classes="muted" />
+
+                                            <TextBox x:Name="AzureOrganizationInput"
+                                                     Text="{Binding AzureOrganizationInput}"
+                                                     Watermark="https://dev.azure.com/your-organization"
+                                                     IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                            <TextBlock Text="Personal access token" Classes="muted" />
+
+                                            <TextBox x:Name="AzurePatInput"
+                                                     Text="{Binding AzurePatInput}"
+                                                     PasswordChar="●"
+                                                     Watermark="Paste your organization’s token"
+                                                     IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                            <TextBlock Text="Choose Code (Read) to browse, clone and fetch. Choose Code (Read &amp; write) if you also want to push. Add each organization separately; reconnect to replace its token. Existing token connections take priority over Microsoft sign-in for that organization."
+                                                       Classes="muted"
+                                                       TextWrapping="Wrap" />
+
+                                            <WrapPanel ItemSpacing="8" LineSpacing="8">
+                                                <Button x:Name="AzurePatConnectButton"
+                                                        Classes="workspace primary"
+                                                        Content="Connect with token"
+                                                        Command="{Binding ConnectAzurePatCommand}"
+                                                        IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                                <Button Classes="workspace"
+                                                        Content="Create / manage tokens…"
+                                                        Command="{Binding OpenAzureTokenPageCommand}" />
+
+                                                <Button Classes="workspace"
+                                                        Content="Cancel"
+                                                        Command="{Binding CancelAuthenticationCommand}"
+                                                        IsVisible="{Binding IsAuthenticationBusy}" />
+                                            </WrapPanel>
+
+                                            <TextBlock Text="{Binding AzureOrganizationFeedback}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Expander>
 
                                     <Border IsVisible="{Binding IsAzureConnected}"
                                             BorderBrush="#454951"
@@ -588,14 +643,14 @@
                                                         <Grid ColumnDefinitions="*,Auto"
                                                               ColumnSpacing="12"
                                                               Margin="4,8">
-                                                            <TextBlock Text="{Binding Name}"
-                                                                       FontWeight="SemiBold"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       VerticalAlignment="Center" />
+                                                            <StackPanel VerticalAlignment="Center" Spacing="3">
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding Authentication}" Classes="muted" FontSize="11" />
+                                                            </StackPanel>
 
                                                             <Button Grid.Column="1"
                                                                     Classes="workspace toolbar"
-                                                                    Content="Remove token"
+                                                                    Content="Remove connection"
                                                                     Tag="{Binding}"
                                                                     Click="RemoveAzureOrganization_Click" />
                                                         </Grid>

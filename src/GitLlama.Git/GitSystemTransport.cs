@@ -50,7 +50,12 @@ public static class GitSystemTransport
             start.Environment.Remove(trace);
         }
 
-        if (!ssh && !string.IsNullOrWhiteSpace(options.AzurePersonalAccessToken))
+        if (!ssh && options.AzureOAuthTokenProvider is not null && string.IsNullOrEmpty(options.AzurePersonalAccessToken))
+        {
+            var token = await options.AzureOAuthTokenProvider(ct).ConfigureAwait(false);
+            ConfigureAzureBearerEnvironment(start, options, token);
+        }
+        else if (!ssh && !string.IsNullOrWhiteSpace(options.AzurePersonalAccessToken))
         {
             ConfigureAzurePatEnvironment(start, options);
         }
@@ -335,10 +340,16 @@ public static class GitSystemTransport
     }
 
     public static void ConfigureAzurePatEnvironment(ProcessStartInfo start, GitNetworkOptions options)
+        => ConfigureAzureEnvironment(start, options, options.AzurePersonalAccessToken, bearer: false);
+
+    public static void ConfigureAzureBearerEnvironment(ProcessStartInfo start, GitNetworkOptions options, string token)
+        => ConfigureAzureEnvironment(start, options, token, bearer: true);
+
+    private static void ConfigureAzureEnvironment(ProcessStartInfo start, GitNetworkOptions options, string token, bool bearer)
     {
         if (
-            string.IsNullOrWhiteSpace(options.AzurePersonalAccessToken)
-            || options.AzurePersonalAccessToken.IndexOfAny(['\r', '\n']) >= 0
+            string.IsNullOrWhiteSpace(token)
+            || token.Any(char.IsWhiteSpace)
             || !Uri.TryCreate(options.AzureCredentialScopeUrl, UriKind.Absolute, out var scope)
             || scope.Scheme != "https"
             || !scope.IsDefaultPort
@@ -372,8 +383,8 @@ public static class GitSystemTransport
         start.Environment["GIT_CONFIG_COUNT"] = "4";
         start.Environment["GIT_CONFIG_KEY_0"] = "http." + options.AzureCredentialScopeUrl + ".extraheader";
         start.Environment["GIT_CONFIG_VALUE_0"] =
-            "Authorization: Basic "
-            + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(":" + options.AzurePersonalAccessToken));
+            bearer ? "Authorization: Bearer " + token
+                : "Authorization: Basic " + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(":" + token));
         start.Environment["GIT_CONFIG_KEY_1"] = "http.followRedirects";
         start.Environment["GIT_CONFIG_VALUE_1"] = "false";
         start.Environment["GIT_CONFIG_KEY_2"] = "credential.helper";

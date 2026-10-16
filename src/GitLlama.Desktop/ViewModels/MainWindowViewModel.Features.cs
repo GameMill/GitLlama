@@ -260,6 +260,7 @@ public partial class MainWindowViewModel
         new()
         {
             AzurePersonalAccessToken = AzurePatFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
+            AzureOAuthTokenProvider = AzureOAuthProviderFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
             AllowedAzureOrganizations = AzureOrganizations.Select(org => org.Name).ToArray(),
             AzureCredentialScopeUrl = AzureScopeFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
             Username =

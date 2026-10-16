@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Restore Microsoft Entra OAuth sign-in for Azure DevOps alongside existing personal access tokens. Sign in with a device code, discover organizations, and allow or revoke each organization's use inside GitLlama. Keep application and directory configuration internal. Renew Microsoft authorization automatically, save the connection securely per profile, and use granted organizations in the repository manager and HTTPS Git operations. Keep PAT connections available for organizations that cannot use directory sign-in.
+- Collapse the Azure DevOps personal access token form by default and mark it deprecated in GitLlama, with Microsoft sign-in preferred for new connections. Existing token connections remain supported.
+
 ## 0.3.0 - 2026-10-16
 
 - Initializing a repository lets you name its branch and, by default, makes a first commit with a README so the branch has history straight away; other files in the folder stay uncommitted. A repository with no commits yet still shows its current branch in the sidebar.

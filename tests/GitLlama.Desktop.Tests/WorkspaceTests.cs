@@ -36,6 +36,195 @@ public static class TestAppBuilder
 
 public sealed class WorkspaceTests
 {
+    private sealed class FakeAzureOAuth : GitLlama.Providers.IAzureDevOpsOAuth
+    {
+        public int TokenRequests { get; private set; }
+        public bool Reject { get; set; }
+        public bool BackgroundCallback { get; set; }
+        public TaskCompletionSource? ContinueSignIn { get; set; }
+        public async Task<GitLlama.Providers.AzureOAuthIdentity> SignInAsync(Func<GitLlama.Providers.AzureDeviceCode, Task> showCode, CancellationToken ct)
+        {
+            var code = new GitLlama.Providers.AzureDeviceCode("TEST-CODE", new Uri("https://microsoft.com/devicelogin"));
+            if (BackgroundCallback) await Task.Run(() => showCode(code), ct);
+            else await showCode(code);
+            if (ContinueSignIn is not null) await ContinueSignIn.Task.WaitAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            if (Reject) throw new InvalidOperationException("Test sign-in rejected.");
+            return new("account-in-tenant", "test@example.invalid");
+        }
+        public Task<string> AccessTokenAsync(string accountId, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            TokenRequests++;
+            Assert.Equal("account-in-tenant", accountId);
+            return Task.FromResult("oauth-access-secret");
+        }
+        public byte[] ExportCache() => System.Text.Encoding.UTF8.GetBytes("cache-with-refresh-secret");
+    }
+
+    [AvaloniaFact]
+    public async Task AzureOAuthCoexistsWithPatGrantsRevokesBrowsesAndRestoresPerProfile()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var oauth = new FakeAzureOAuth { BackgroundCallback = true };
+        vm.AzureOAuthFactory = (_, _, _) => oauth;
+        vm.AzureOrganizationLoader = (token, _) =>
+        {
+            Assert.Equal("oauth-access-secret", token);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([new("oauth-team"), new("other-team")]);
+        };
+        vm.AzureRepositoryLoader = (org, token, _) =>
+        {
+            Assert.Equal("pat-secret", token);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([new("pat", "repo", "project", "https://dev.azure.com/pat-team/project/_git/repo", "")]);
+        };
+        vm.AzureOAuthRepositoryLoader = (org, token, _) =>
+        {
+            Assert.Equal("oauth-team", org);
+            Assert.Equal("oauth-access-secret", token);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([new("oauth", "repo", "project", "https://dev.azure.com/oauth-team/project/_git/repo", "")]);
+        };
+        vm.OpenIntegrationBrowser = uri =>
+        {
+            Assert.True(Dispatcher.UIThread.CheckAccess());
+            Assert.True(IntegrationBrowserPolicy.Allows(uri));
+            Assert.Equal("https://microsoft.com/devicelogin", uri.AbsoluteUri.TrimEnd('/'));
+            Assert.True(vm.HasAzureOAuthCode);
+            return Task.FromResult(true);
+        };
+        vm.AzureOrganizationInput = "pat-team";
+        vm.AzurePatInput = "pat-secret";
+        await vm.ConnectAzurePatCommand.ExecuteAsync(null);
+        await vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
+        Assert.True(vm.IsAzureOAuthConnected);
+        Assert.False(vm.HasAzureOAuthCode);
+        Assert.Equal("pat-team", Assert.Single(vm.AzureOrganizations).Name);
+        Assert.Equal(2, vm.AzureOAuthOrganizations.Count);
+        var url = "https://dev.azure.com/oauth-team/project/_git/repo";
+        Assert.Throws<InvalidOperationException>(() => vm.NetworkOptions(0, remoteUrl: url).EnsureAzureAccess(url));
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
+        Assert.Equal(2, vm.AzureOrganizations.Count);
+        var options = vm.NetworkOptions(0, remoteUrl: url);
+        Assert.True(options.UsesAzureAuthorization(url));
+        Assert.Empty(options.AzurePersonalAccessToken);
+        Assert.Equal("oauth-access-secret", await options.AzureOAuthTokenProvider!(CancellationToken.None));
+        Assert.Null(vm.NetworkOptions(0, remoteUrl: "git@ssh.dev.azure.com:v3/oauth-team/project/repo").AzureOAuthTokenProvider);
+        await vm.RefreshCloneableRepositoriesCommand.ExecuteAsync(null);
+        Assert.Equal(2, vm.CloneableRepositories.Count);
+        Assert.Contains(vm.CloneableRepositories, repo => repo.CloneUrl == url);
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
+        await Assert.ThrowsAsync<OperationCanceledException>(() => options.AzureOAuthTokenProvider!(CancellationToken.None));
+        Assert.Equal("pat-team", Assert.Single(vm.AzureOrganizations).Name);
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
+
+        if (OperatingSystem.IsWindows())
+        {
+            var originalProfile = vm.ActiveProfile!;
+            await vm.CreateProfileCommand.ExecuteAsync(null);
+            Assert.False(vm.IsAzureOAuthConnected);
+            Assert.Empty(vm.AzureOrganizations);
+            vm.ProfileToSwitch = originalProfile;
+            await vm.SwitchProfileCommand.ExecuteAsync(null);
+            Assert.True(vm.IsAzureOAuthConnected);
+            Assert.Equal(2, vm.AzureOrganizations.Count);
+            Assert.True(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team").IsAllowed);
+            var encrypted = await File.ReadAllBytesAsync(Directory.GetFiles(Path.Combine(fixture.SettingsPath, "connections"), "azure-*.dat").Single());
+            Assert.DoesNotContain("cache-with-refresh-secret", System.Text.Encoding.UTF8.GetString(encrypted));
+            Assert.DoesNotContain("pat-secret", File.ReadAllText(Path.Combine(fixture.SettingsPath, "settings.json")));
+        }
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            window.ShowDocument("Settings");
+            vm.SelectedSettingsSection = "Integrations";
+            Dispatcher.UIThread.RunJobs();
+            var settings = window.GetVisualDescendants().OfType<SettingsView>().Single();
+            settings.FindControl<Expander>("AzureIntegrationExpander")!.IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(settings.FindControl<Button>("AzureSignInButton")!.IsVisible);
+            Assert.NotNull(settings.FindControl<Button>("AzurePatConnectButton"));
+            Assert.Null(settings.FindControl<TextBox>("AzureOAuthTenantInput"));
+            Assert.DoesNotContain(settings.GetVisualDescendants().OfType<TextBlock>(), block => block.Text is "Directory (tenant) ID" or "Application (client) ID");
+            settings.FindControl<Expander>("AzureIntegrationExpander")!.BringIntoView();
+            SavePreview(window, "azure-oauth-and-pat.png");
+        }
+        finally { window.Close(); }
+        await vm.DisconnectAzureOAuthCommand.ExecuteAsync(null);
+        Assert.False(vm.IsAzureOAuthConnected);
+        Assert.Equal("pat-team", Assert.Single(vm.AzureOrganizations).Name);
+        Assert.Equal("pat-secret", vm.NetworkOptions(0, remoteUrl: "https://dev.azure.com/pat-team/project/_git/repo").AzurePersonalAccessToken);
+    }
+
+    [AvaloniaFact]
+    public async Task AzureOAuthEmptyDiscoveryAndFailedSignInPreservePatConnections()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var oauth = new FakeAzureOAuth();
+        vm.AzureOAuthFactory = (_, _, _) => oauth;
+        vm.AzureOrganizationLoader = (_, _) => Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([]);
+        vm.AzureRepositoryLoader = (_, _, _) => Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([]);
+        vm.AzureOrganizationInput = "pat-team";
+        vm.AzurePatInput = "pat-secret";
+        await vm.ConnectAzurePatCommand.ExecuteAsync(null);
+        await vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
+        Assert.Contains("directory identity", vm.AzureOAuthFeedback);
+        Assert.Empty(vm.AzureOAuthOrganizations);
+        Assert.True(vm.IsAzureOAuthConnected);
+        oauth.Reject = true;
+        await vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
+        Assert.True(vm.IsAzureOAuthConnected);
+        Assert.Single(vm.AzureOrganizations);
+        Assert.False(vm.IsAuthenticationBusy);
+        Assert.False(vm.HasAzureOAuthCode);
+        oauth.Reject = false;
+        vm.OpenIntegrationBrowser = _ => { vm.CancelAuthenticationCommand.Execute(null); return Task.FromResult(true); };
+        await vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
+        Assert.True(vm.IsAzureOAuthConnected);
+        Assert.Single(vm.AzureOrganizations);
+        Assert.Contains("canceled", vm.AzureOAuthFeedback);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AzureSignInKeepsCodeVisibleWhenBrowserCannotOpen(bool throws)
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        vm.AzureOAuthFactory = (_, _, _) => new FakeAzureOAuth
+        {
+            BackgroundCallback = true,
+            ContinueSignIn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        var launches = 0;
+        vm.OpenIntegrationBrowser = uri =>
+        {
+            launches++;
+            Assert.True(Dispatcher.UIThread.CheckAccess());
+            Assert.True(IntegrationBrowserPolicy.Allows(uri));
+            return throws ? throw new IOException("Browser unavailable") : Task.FromResult(false);
+        };
+        var signIn = vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => vm.HasAzureOAuthCode && vm.AzureOAuthFeedback.Contains("https://microsoft.com/devicelogin"));
+        Assert.Equal("TEST-CODE", vm.AzureOAuthUserCode);
+        Assert.True(vm.IsAuthenticationBusy);
+        Assert.False(signIn.IsCompleted);
+        await vm.OpenAzureOAuthPageCommand.ExecuteAsync(null);
+        Assert.Equal(2, launches);
+        Assert.True(vm.HasAzureOAuthCode);
+        vm.CancelAuthenticationCommand.Execute(null);
+        await signIn;
+        Assert.False(vm.IsAuthenticationBusy);
+        Assert.False(vm.HasAzureOAuthCode);
+        Assert.Contains("canceled", vm.AzureOAuthFeedback);
+    }
+
     [AvaloniaFact]
     public async Task DiscardAllInspectorActionIsRedConfirmsAndHidesForCleanOrConflictedWorkspaces()
     {
@@ -2652,7 +2841,7 @@ public sealed class WorkspaceTests
             Dispatcher.UIThread.RunJobs();
             var view = window.GetVisualDescendants().OfType<SettingsView>().Single();
             Assert.NotNull(view.FindControl<TextBox>("AzurePatInput"));
-            Assert.Null(view.FindControl<Button>("AzureSignInButton"));
+            Assert.NotNull(view.FindControl<Button>("AzureSignInButton"));
             view.FindControl<ScrollViewer>("SettingsContentScroll")!.Offset = new Vector(0, 480);
             SavePreview(window, "azure-pat-connections.png");
         }
@@ -2664,6 +2853,13 @@ public sealed class WorkspaceTests
         Assert.DoesNotContain("pat-team", File.ReadAllText(Path.Combine(fixture.SettingsPath, "settings.json")));
         var profile = vm.ActiveProfile!.Id;
         vm.Dispose();
+        var legacyStore = new ProtectedIntegrationStore(fixture.SettingsPath);
+        if (legacyStore.IsSupported)
+            await legacyStore.SavePayloadAsync(profile, "azure", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                Version = 3,
+                Connections = new[] { new { Organization = "team", Token = "pat-team" }, new { Organization = "other", Token = "pat-other" } }
+            }));
         var restored = await fixture.OpenAsync(azureRepositoryLoader: loader);
         restored.AutoRefresh = false;
         var store = new ProtectedIntegrationStore(fixture.SettingsPath);
@@ -2869,6 +3065,13 @@ public sealed class WorkspaceTests
     [Theory]
     [InlineData("https://github.com/settings/connections/applications/Ov23liO3PME31PJH8PfM", true)]
     [InlineData("https://github.com/login/device", true)]
+    [InlineData("https://microsoft.com/devicelogin", true)]
+    [InlineData("https://www.microsoft.com/devicelogin", true)]
+    [InlineData("https://login.microsoftonline.com/common/oauth2/deviceauth", true)]
+    [InlineData("https://microsoft.com.evil.example/devicelogin", false)]
+    [InlineData("https://microsoft.com/devicelogin?redirect=evil", false)]
+    [InlineData("https://microsoft.com/anything-else", false)]
+    [InlineData("https://user:pass@microsoft.com/devicelogin", false)]
     [InlineData("https://github.com.evil.example/settings/connections/applications/id", false)]
     [InlineData("https://github.com/settings/connections/applications/id?redirect=evil", false)]
     public void IntegrationBrowserChecksExactAllowedLinks(string url, bool allowed) =>
@@ -3011,7 +3214,7 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
-    public async Task AzureOldOAuthConnectionsAreDiscarded()
+    public async Task AzureLegacyOAuthCachesRequireFreshSignIn()
     {
         using var fixture = new WorkspaceFixture();
         var vm = await fixture.OpenAsync();
@@ -3033,7 +3236,7 @@ public sealed class WorkspaceTests
         restored.AutoRefresh = false;
         Assert.False(restored.IsAzureConnected);
         Assert.Empty(restored.AzureOrganizations);
-        Assert.Contains("OAuth has been removed", restored.AzureOrganizationFeedback);
+        Assert.Contains("older version", restored.AzureOrganizationFeedback);
         Assert.Null(await store.LoadPayloadAsync(profile, "azure"));
     }
 

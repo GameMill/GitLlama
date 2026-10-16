@@ -90,7 +90,7 @@ public partial class MainWindowViewModel
         var profile = ActiveProfile?.Id;
         var azureRevision = Interlocked.Read(ref _azureRevision);
         var githubRevision = Interlocked.Read(ref _githubConnectionRevision);
-        var azureConnections = _azurePersonalAccessTokens.ToArray();
+        var azureConnections = AzureOrganizations.Select(org => org.Name).ToArray();
         var githubToken = IsGithubConnected ? GithubUsableToken : "";
         var repositories = new List<CloneableRepository>();
         var failed = new List<string>();
@@ -113,11 +113,11 @@ public partial class MainWindowViewModel
             {
                 try
                 {
-                    var items = await AzureRepositoryLoader(connection.Key, connection.Value, timeout.Token);
+                    var items = await LoadAzureRepositoriesAsync(connection, timeout.Token);
                     repositories.AddRange(
                         items.Select(repo => new CloneableRepository(
                             "Azure DevOps",
-                            connection.Key + " / " + repo.Project,
+                            connection + " / " + repo.Project,
                             repo.Name,
                             repo.CloneUrl
                         ))
@@ -125,7 +125,7 @@ public partial class MainWindowViewModel
                 }
                 catch
                 {
-                    failed.Add("Azure DevOps / " + connection.Key);
+                    failed.Add("Azure DevOps / " + connection);
                 }
             }
 

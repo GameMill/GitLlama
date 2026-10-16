@@ -132,6 +132,19 @@ public partial class SubmodulesView : UserControl
 
 public partial class SettingsView : UserControl
 {
+    private async void CopyAzureOAuthCode_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel { HasAzureOAuthCode: true } vm
+            && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+            await clipboard.SetTextAsync(vm.AzureOAuthUserCode);
+    }
+
+    private async void ToggleAzureOAuthOrganization_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainWindowViewModel vm && sender is Button { Tag: AzureOAuthOrganization organization })
+            await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(organization);
+    }
+
     private void LoadPageantKey_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel vm)

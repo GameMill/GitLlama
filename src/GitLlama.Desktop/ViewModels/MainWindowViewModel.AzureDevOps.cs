@@ -8,7 +8,7 @@ using GitLlama.Providers;
 
 namespace GitLlama.Desktop.ViewModels;
 
-public sealed record AzureOrganizationConnection(string Name)
+public sealed record AzureOrganizationConnection(string Name, string Authentication = "Personal access token")
 {
     public string Url => "https://dev.azure.com/" + Uri.EscapeDataString(Name);
 }
@@ -44,6 +44,7 @@ public partial class MainWindowViewModel
     public bool HasAzureBrowseOrganization => !string.IsNullOrEmpty(AzureOrganization);
     private readonly Dictionary<string, string> _azurePersonalAccessTokens = new(StringComparer.OrdinalIgnoreCase);
     private long _azureRevision;
+    private readonly SemaphoreSlim _azureStorageLock = new(1, 1);
     internal Func<
         string,
         string,
@@ -62,6 +63,7 @@ public partial class MainWindowViewModel
     {
         public int Version { get; init; }
         public AzureSavedPat[] Connections { get; init; } = [];
+        public AzureSavedOAuth? OAuth { get; init; }
     }
 
     partial void OnAzureOrganizationChanged(string value)
@@ -76,6 +78,7 @@ public partial class MainWindowViewModel
         Interlocked.Increment(ref _azureRevision);
         InvalidateCloneableRepositories();
         _azurePersonalAccessTokens.Clear();
+        ClearAzureOAuthMemory();
         AzurePatInput = "";
         AzureOrganizationInput = "";
         AzureOrganization = "";
@@ -93,10 +96,17 @@ public partial class MainWindowViewModel
         AzureAccountStatus =
             AzureOrganizations.Count == 0
                 ? "No organizations connected"
-                : $"{AzureOrganizations.Count} organization{(AzureOrganizations.Count == 1 ? "" : "s")} connected with personal access tokens";
+                : $"{AzureOrganizations.Count} organization{(AzureOrganizations.Count == 1 ? "" : "s")} connected";
     }
 
     private async Task ForgetAzureAsync(string profile)
+    {
+        await _azureStorageLock.WaitAsync();
+        try { await ForgetAzureCoreAsync(profile); }
+        finally { _azureStorageLock.Release(); }
+    }
+
+    private async Task ForgetAzureCoreAsync(string profile)
     {
         try
         {
@@ -110,21 +120,30 @@ public partial class MainWindowViewModel
 
     private async Task SaveAzureConnectionsAsync(CancellationToken ct)
     {
+        await _azureStorageLock.WaitAsync(ct);
+        try { await SaveAzureConnectionsCoreAsync(ct); }
+        finally { _azureStorageLock.Release(); }
+    }
+
+    private async Task SaveAzureConnectionsCoreAsync(CancellationToken ct)
+    {
         if (ActiveProfile is not { } profile)
         {
             return;
         }
 
-        if (_azurePersonalAccessTokens.Count == 0)
+        if (_azurePersonalAccessTokens.Count == 0 && !IsAzureOAuthConnected)
         {
-            await ForgetAzureAsync(profile.Id);
+            await ForgetAzureCoreAsync(profile.Id);
             return;
         }
 
+        var oauth = ExportAzureOAuth();
         var payload = JsonSerializer.SerializeToUtf8Bytes(
             new AzureSavedConnection
             {
-                Version = 3,
+                Version = 4,
+                OAuth = oauth,
                 Connections = _azurePersonalAccessTokens
                     .Select(pair => new AzureSavedPat(pair.Key, pair.Value))
                     .ToArray(),
@@ -134,7 +153,7 @@ public partial class MainWindowViewModel
         {
             await GithubStore.SavePayloadAsync(profile.Id, "azure", payload, ct);
             AzureStorageFeedback =
-                "Tokens saved securely for this profile. Replace them when they expire or are revoked.";
+                "Connections saved securely for this profile. Microsoft authorization renews automatically; personal access tokens keep their chosen expiry.";
         }
         catch (OperationCanceledException)
         {
@@ -156,6 +175,7 @@ public partial class MainWindowViewModel
         finally
         {
             CryptographicOperations.ZeroMemory(payload);
+            if (oauth is not null) CryptographicOperations.ZeroMemory(oauth.Cache);
         }
     }
 
@@ -196,11 +216,11 @@ public partial class MainWindowViewModel
                 return;
             }
 
-            if (saved is null || saved.Version != 3)
+            if (saved is null || saved.Version is not (3 or 4))
             {
                 await ForgetAzureAsync(profile.Id);
                 AzureOrganizationFeedback =
-                    "Azure OAuth has been removed. Connect each organization with a personal access token.";
+                    "This saved Azure connection is from an older version. Sign in again or connect with a personal access token.";
                 return;
             }
             // Validate the entire payload before publishing any connection.
@@ -215,14 +235,14 @@ public partial class MainWindowViewModel
                 _azurePersonalAccessTokens[connection.Organization] = connection.Token;
             }
 
-            CollectionUpdates.Sync(
-                AzureOrganizations,
-                _azurePersonalAccessTokens.Keys.Select(name => new AzureOrganizationConnection(name)).ToArray(),
-                org => org.Name
-            );
-            UpdateAzureConnectionStatus();
+            if (saved.OAuth is not null)
+            {
+                try { RestoreAzureOAuth(saved.OAuth); }
+                catch { AzureOAuthFeedback = "Microsoft sign-in could not be restored. Sign in again; personal access token connections are kept."; }
+            }
+            SynchronizeAzureOrganizations();
             AzureStorageFeedback =
-                "Saved tokens restored for this profile. Repository access is checked when you browse or connect.";
+                "Saved connections restored for this profile. Repository access is checked when you browse or connect.";
         }
         catch
         {
@@ -279,11 +299,7 @@ public partial class MainWindowViewModel
             _azurePersonalAccessTokens[org] = token;
             Interlocked.Increment(ref _azureRevision);
             InvalidateCloneableRepositories();
-            CollectionUpdates.Sync(
-                AzureOrganizations,
-                _azurePersonalAccessTokens.Keys.Select(name => new AzureOrganizationConnection(name)).ToArray(),
-                item => item.Name
-            );
+            SynchronizeAzureOrganizations();
             SelectedAzureOrganization = AzureOrganizations.Single(item =>
                 item.Name.Equals(org, StringComparison.OrdinalIgnoreCase)
             );
@@ -320,7 +336,11 @@ public partial class MainWindowViewModel
         }
 
         _azurePersonalAccessTokens.Remove(organization.Name);
-        AzureOrganizations.Remove(organization);
+        _azureOAuthAllowed.Remove(organization.Name);
+        var oauthChoice = AzureOAuthOrganizations.FirstOrDefault(item => item.Name.Equals(organization.Name, StringComparison.OrdinalIgnoreCase));
+        if (oauthChoice is not null)
+            AzureOAuthOrganizations[AzureOAuthOrganizations.IndexOf(oauthChoice)] = oauthChoice with { IsAllowed = false };
+        SynchronizeAzureOrganizations();
         Interlocked.Increment(ref _azureRevision);
         InvalidateCloneableRepositories();
         if (AzureOrganization.Equals(organization.Name, StringComparison.OrdinalIgnoreCase))
@@ -335,7 +355,7 @@ public partial class MainWindowViewModel
         {
             await SaveAzureConnectionsAsync(CancellationToken.None);
             AzureOrganizationFeedback =
-                "Removed " + organization.Name + " from GitLlama. To revoke the token itself, use Azure DevOps.";
+                "Removed " + organization.Name + " from GitLlama. Microsoft consent and Azure DevOps tokens are managed separately.";
         }
         finally
         {
@@ -359,7 +379,7 @@ public partial class MainWindowViewModel
     [RelayCommand]
     private async Task RefreshAzureRepositoriesAsync()
     {
-        if (IsAuthenticationBusy || !_azurePersonalAccessTokens.TryGetValue(AzureOrganization, out var token))
+        if (IsAuthenticationBusy || !AzureOrganizations.Any(item => item.Name.Equals(AzureOrganization, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -370,7 +390,7 @@ public partial class MainWindowViewModel
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
-            var repositories = await AzureRepositoryLoader(org, token, timeout.Token);
+            var repositories = await LoadAzureRepositoriesAsync(org, timeout.Token);
             if (_disposed || revision != Interlocked.Read(ref _azureRevision) || AzureOrganization != org)
             {
                 return;
@@ -383,7 +403,7 @@ public partial class MainWindowViewModel
         {
             AzureRepositories.Clear();
             AzureOrganizationFeedback =
-                "Repositories could not be loaded. Check your connection, or replace an expired or revoked token.";
+                "Repositories could not be loaded. Check your connection, sign in again with Microsoft, or replace an expired personal access token.";
         }
         finally
         {
@@ -425,7 +445,7 @@ public partial class MainWindowViewModel
     private string AzureScopeFor(string url)
     {
         var org = AzureDevOpsRemote.Parse(url)?.Organization;
-        return org is not null && _azurePersonalAccessTokens.ContainsKey(org)
+        return org is not null && (_azurePersonalAccessTokens.ContainsKey(org) || _azureOAuthAllowed.Contains(org))
             ? AzureDevOpsRemote.BearerScope(url, org) ?? ""
             : "";
     }

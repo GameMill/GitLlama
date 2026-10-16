@@ -9,6 +9,77 @@ namespace GitLlama.Core.Tests;
 
 public sealed class AzureDevOpsTests
 {
+    [Fact]
+    public void GitOAuthBearerHeaderIsScopedAndNeverPlacedInArguments()
+    {
+        var options = new GitNetworkOptions
+        {
+            AzureOAuthTokenProvider = _ => Task.FromResult("access-secret"),
+            AllowedAzureOrganizations = ["team"],
+            AzureCredentialScopeUrl = "https://dev.azure.com/team/",
+        };
+        Assert.True(options.UsesAzureAuthorization("https://dev.azure.com/team/project/_git/repo"));
+        Assert.False(options.UsesAzureToken("https://dev.azure.com/other/project/_git/repo"));
+        Assert.False(options.UsesAzureToken("git@ssh.dev.azure.com:v3/team/project/repo"));
+        Assert.Throws<InvalidOperationException>(() => options.EnsureAzureAccess("https://dev.azure.com/other/project/_git/repo"));
+        var start = new ProcessStartInfo("git");
+        start.ArgumentList.Add("fetch");
+        GitSystemTransport.ConfigureAzureBearerEnvironment(start, options, "access-secret");
+        Assert.Equal("http.https://dev.azure.com/team/.extraheader", start.Environment["GIT_CONFIG_KEY_0"]);
+        Assert.Equal("Authorization: Bearer access-secret", start.Environment["GIT_CONFIG_VALUE_0"]);
+        Assert.Equal("false", start.Environment["GIT_CONFIG_VALUE_1"]);
+        Assert.DoesNotContain(start.ArgumentList, argument => argument.Contains("access-secret"));
+        Assert.Throws<InvalidOperationException>(() => GitSystemTransport.ConfigureAzureBearerEnvironment(start, options, "secret\r\ninjected"));
+    }
+
+    [Fact]
+    public async Task OrganizationDiscoveryUsesDevOpsProfileIdentityAndPaginatesWithBearer()
+    {
+        using var handler = new OrganizationHandler();
+        using var client = new HttpClient(handler);
+        using var service = new AzureDevOpsService(client);
+        var organizations = await service.OrganizationsAsync("oauth-secret");
+        Assert.Equal(["one", "two"], organizations.Select(org => org.Name));
+        Assert.Equal(3, handler.Requests.Count);
+        Assert.Contains("memberId=11111111-1111-1111-1111-111111111111", handler.Requests[1]);
+        Assert.Contains("continuationToken=next%20page", handler.Requests[2]);
+        Assert.All(handler.Authorization, value => Assert.Equal("Bearer oauth-secret", value));
+    }
+
+    [Fact]
+    public async Task OAuthRepositoryDiscoveryUsesBearerAndDoesNotReturnOtherOrganizations()
+    {
+        using var handler = new Handler("{\"value\":[{\"id\":\"1\",\"name\":\"repo\",\"project\":{\"name\":\"project\"},\"remoteUrl\":\"https://dev.azure.com/team/project/_git/repo\"}]}");
+        using var client = new HttpClient(handler);
+        using var service = new AzureDevOpsService(client);
+        Assert.Single(await service.RepositoriesAsync("team", "oauth-secret", bearer: true));
+        Assert.Equal("Bearer oauth-secret", handler.Authorization);
+        handler.Status = HttpStatusCode.Forbidden;
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RepositoriesAsync("team", "oauth-secret", bearer: true));
+        Assert.Contains("app consent", error.Message);
+        Assert.DoesNotContain("oauth-secret", error.Message);
+    }
+
+    private sealed class OrganizationHandler : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+        public List<string?> Authorization { get; } = [];
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Requests.Add(request.RequestUri!.AbsoluteUri);
+            Authorization.Add(request.Headers.Authorization?.ToString());
+            var index = Requests.Count;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(index == 1 ? "{\"id\":\"11111111-1111-1111-1111-111111111111\"}"
+                    : index == 2 ? "{\"value\":[{\"accountName\":\"one\"}]}"
+                    : "{\"value\":[{\"accountName\":\"two\"},{\"accountName\":\"one\"},{\"accountName\":\"https://evil.example\"}]}")
+            };
+            if (index == 2) response.Headers.Add("x-ms-continuationtoken", "next page");
+            return Task.FromResult(response);
+        }
+    }
+
     [Theory]
     [InlineData("https://dev.azure.com/team/My%20Project/_git/client")]
     [InlineData("https://team@dev.azure.com/team/My%20Project/_git/client")]
