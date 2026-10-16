@@ -4,6 +4,8 @@ using GitLlama.Git;
 using LibGit2Sharp;
 
 // Manual acceptance: dotnet run --project tests/ssh-integration/Acceptance.csproj -- <helper-exe> <Paramiko-library-directory>
+// Native transport acceptance: set PYTHONPATH to Paramiko's directory, then run with --native.
+if (args.Contains("--native")) { await NativeSshProbe.RunAsync(); return; }
 var root = Path.Combine(Path.GetTempPath(), "GitLlama-SSH-acceptance-" + Guid.NewGuid());
 Directory.CreateDirectory(root);
 Process? server = null;

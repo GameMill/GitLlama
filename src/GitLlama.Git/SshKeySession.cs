@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 
 namespace GitLlama.Git;
 
@@ -24,6 +25,7 @@ public sealed class SshKeySession : IDisposable
     private readonly SemaphoreSlim _unlockGate = new(1);
     private readonly object _sync = new();
     private readonly string? _trustFile;
+    public string? KnownHostsFile => _trustFile is null ? null : _trustFile + ".known_hosts";
     private int _generation;
     public Func<SshUnlockRequest, CancellationToken, Task<string?>>? RequestPassphrase { get; set; }
     public Func<SshHostTrustRequest, CancellationToken, Task<bool>>? RequestHostTrust { get; set; }
@@ -87,14 +89,15 @@ public sealed class SshKeySession : IDisposable
                 {
                     key = new PrivateKeyFile(new MemoryStream(bytes, writable: false));
                 }
+                catch (SshPassPhraseNullOrEmptyException) { encrypted = true; }
                 catch (Exception)
                 {
                     throw new InvalidOperationException(
-                        "The SSH private key could not be read. Choose a valid PuTTY key."
+                        "The SSH private key could not be read. Choose a valid OpenSSH or PuTTY key."
                     );
                 }
             }
-            else
+            if (encrypted)
             {
                 for (var attempt = 0; attempt < 3 && key is null; attempt++)
                 {
@@ -173,6 +176,7 @@ public sealed class SshKeySession : IDisposable
             _hosts.TryGetValue(id, out previous);
             if (previous == fingerprint)
             {
+                SaveKnownHost(host, port, publicKey);
                 return true;
             }
         }
@@ -199,9 +203,31 @@ public sealed class SshKeySession : IDisposable
             }
 
             _hosts[id] = fingerprint;
+            SaveKnownHost(host, port, publicKey);
         }
 
         return true;
+    }
+
+    private void SaveKnownHost(string host, int port, byte[] publicKey)
+    {
+        if (KnownHostsFile is not { } file) return;
+        if (host.Any(char.IsWhiteSpace) || host.Any(char.IsControl))
+            throw new InvalidOperationException("Invalid SSH host name.");
+        if (publicKey.Length < 8) throw new InvalidOperationException("Invalid SSH host key.");
+        var length = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(publicKey);
+        if (length == 0 || length > publicKey.Length - 4) throw new InvalidOperationException("Invalid SSH host key type.");
+        var type = System.Text.Encoding.ASCII.GetString(publicKey, 4, (int)length);
+        var encoded = Convert.ToBase64String(publicKey);
+        SshPublicKeyReader.Parse(type + " " + encoded);
+        var name = port == 22 ? host : $"[{host}]:{port}";
+        var prefix = name + " " + type + " ";
+        var lines = File.Exists(file) ? File.ReadAllLines(file).Where(line => !line.StartsWith(prefix, StringComparison.Ordinal)).ToList() : [];
+        lines.Add(prefix + encoded);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var temporary = file + ".tmp";
+        try { File.WriteAllLines(temporary, lines); File.Move(temporary, file, overwrite: true); }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     public void Clear()

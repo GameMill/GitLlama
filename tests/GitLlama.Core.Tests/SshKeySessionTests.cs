@@ -81,24 +81,32 @@ public sealed class SshKeySessionTests : IDisposable
     {
         Directory.CreateDirectory(root);
         var path = Path.Combine(root, "hosts.json");
+        var publicKey = new byte[4 + 11 + 4 + 32];
+        BinaryPrimitives.WriteInt32BigEndian(publicKey, 11);
+        Encoding.ASCII.GetBytes("ssh-ed25519").CopyTo(publicKey, 4);
+        BinaryPrimitives.WriteInt32BigEndian(publicKey.AsSpan(15), 32);
+        var changedKey = publicKey.ToArray();
+        changedKey[^1] = 1;
         using var session = new SshKeySession(path);
-        Assert.False(await session.VerifyHostAsync("host", 22, "ssh-ed25519", [1, 2], default));
+        Assert.False(await session.VerifyHostAsync("host", 22, "ssh-ed25519", publicKey, default));
         session.RequestHostTrust = (request, _) =>
         {
             Assert.Null(request.PreviousFingerprint);
             return Task.FromResult(true);
         };
-        Assert.True(await session.VerifyHostAsync("host", 22, "ssh-ed25519", [1, 2], default));
+        Assert.True(await session.VerifyHostAsync("host", 22, "ssh-ed25519", publicKey, default));
         using var restored = new SshKeySession(path);
-        Assert.True(await restored.VerifyHostAsync("host", 22, "ssh-ed25519", [1, 2], default));
+        Assert.True(await restored.VerifyHostAsync("host", 22, "ssh-ed25519", publicKey, default));
         restored.RequestHostTrust = (request, _) =>
         {
             Assert.NotNull(request.PreviousFingerprint);
             return Task.FromResult(false);
         };
-        Assert.False(await restored.VerifyHostAsync("host", 22, "ssh-ed25519", [2, 3], default));
+        Assert.False(await restored.VerifyHostAsync("host", 22, "ssh-ed25519", changedKey, default));
         Assert.DoesNotContain("passphrase", File.ReadAllText(path));
         Assert.Contains("SHA256:", File.ReadAllText(path));
+        Assert.Contains("host ssh-ed25519 " + Convert.ToBase64String(publicKey), File.ReadAllText(restored.KnownHostsFile!));
+        Assert.DoesNotContain(Convert.ToBase64String(changedKey), File.ReadAllText(restored.KnownHostsFile!));
     }
 
     [Fact]

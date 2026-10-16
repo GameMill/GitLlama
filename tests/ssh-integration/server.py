@@ -3,6 +3,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import paramiko
 
 repo = sys.argv[1]
@@ -64,6 +65,12 @@ def handle(connection):
         download(process.stdout, channel.sendall)
         errors.join()
         channel.send_exit_status(process.wait())
+        channel.shutdown_write()
+        # Let the client consume the final packets before closing the transport.
+        for _ in range(50):
+            if channel.closed:
+                break
+            time.sleep(0.1)
         channel.close()
     except (OSError, EOFError, paramiko.SSHException) as error:
         print(str(error), file=sys.stderr, flush=True)

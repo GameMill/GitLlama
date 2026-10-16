@@ -151,6 +151,7 @@ public sealed partial class GitRemoteService
         Task.Run(
             () =>
             {
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
                 ArgumentException.ThrowIfNullOrWhiteSpace(name);
@@ -160,30 +161,6 @@ public sealed partial class GitRemoteService
                     ?? throw new InvalidOperationException($"Remote '{name}' does not exist.");
                 var options = (network ?? new GitNetworkOptions()).Fetch(cancellationToken);
                 network?.EnsureAzureAccess(remote.Url);
-                if (GitSystemTransport.IsSsh(remote.Url))
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            repositoryPath,
-                            ["fetch", "--", remote.Name],
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: true,
-                            sshRemoteUrl: remote.Url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                    return;
-                }
-
-                if (network?.UsesAzureAuthorization(remote.Url) == true)
-                {
-                    GitSystemTransport
-                        .RunAsync(repositoryPath, ["fetch", "--", remote.Name], network, cancellationToken)
-                        .GetAwaiter()
-                        .GetResult();
-                    return;
-                }
 
                 cancellationToken.ThrowIfCancellationRequested();
                 Commands.Fetch(
@@ -213,6 +190,7 @@ public sealed partial class GitRemoteService
         Task.Run(
             () =>
             {
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
                 ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
@@ -292,24 +270,6 @@ public sealed partial class GitRemoteService
                         .GetResult();
                 }
 
-                if (
-                    GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url)
-                    || network?.UsesAzureAuthorization(remote.PushUrl ?? remote.Url) == true
-                )
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            repositoryPath,
-                            new[] { "push", "--", remote.Name }.Concat(refspecs).ToArray(),
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url),
-                            sshRemoteUrl: remote.PushUrl ?? remote.Url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                }
-                else
                 {
                     var rejected = new List<PushStatusError>();
                     var pushOptions = (network ?? new GitNetworkOptions()).Push(cancellationToken, rejected.Add);
@@ -372,6 +332,7 @@ public sealed partial class GitRemoteService
         Task.Run(
             () =>
             {
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
                 using var repository = new Repository(repositoryPath);
@@ -394,28 +355,6 @@ public sealed partial class GitRemoteService
                 if (upstreamRemote is not null)
                 {
                     network?.EnsureAzureAccess(upstreamRemote.Url);
-                }
-
-                if (
-                    upstreamRemote is not null
-                    && (
-                        GitSystemTransport.IsSsh(upstreamRemote.Url)
-                        || network?.UsesAzureAuthorization(upstreamRemote.Url) == true
-                    )
-                )
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            repositoryPath,
-                            ["pull", "--ff-only", "--no-rebase"],
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: GitSystemTransport.IsSsh(upstreamRemote.Url),
-                            sshRemoteUrl: upstreamRemote.Url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                    return;
                 }
 
                 var signature = new Signature("GitLlama", "gitllama@localhost", DateTimeOffset.UtcNow);

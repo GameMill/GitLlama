@@ -73,24 +73,10 @@ public sealed class GitRepositoryLifecycleService
             () =>
             {
                 ArgumentException.ThrowIfNullOrWhiteSpace(url);
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 network?.EnsureAzureAccess(url);
                 var target = ValidateDestination(path);
                 cancellationToken.ThrowIfCancellationRequested();
-                if (GitSystemTransport.IsSsh(url) || network?.UsesAzureAuthorization(url) == true)
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            null,
-                            ["clone", "--", url.Trim(), target],
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: GitSystemTransport.IsSsh(url),
-                            sshRemoteUrl: url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                    return target;
-                }
 
                 var options = new CloneOptions
                 {

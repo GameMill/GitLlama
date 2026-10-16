@@ -10,6 +10,9 @@ public sealed record GitNetworkProgress(string Operation, int Completed, int Tot
 /// <summary>Credentials are supplied for a single operation and never written to settings.</summary>
 public sealed class GitNetworkOptions
 {
+    internal Func<HttpMessageHandler>? HttpsHandlerFactory { get; init; }
+    internal Func<string, CancellationToken, Task<UsernamePasswordCredentials>>? CredentialHelper { get; init; }
+    internal Func<System.Diagnostics.ProcessStartInfo, System.Diagnostics.Process>? SshProcessFactory { get; init; }
     public string Username { get; init; } = "";
     public string Secret { get; init; } = "";
     public string CredentialHost { get; init; } = "";
@@ -152,6 +155,8 @@ public sealed class GitNetworkOptions
             _credentialSupplied = true;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromMinutes(2));
+            if (CredentialHelper is not null)
+                return CredentialHelper(url, timeout.Token).GetAwaiter().GetResult();
             return GitSystemTransport
                 .GetCredentialsAsync(url, RepositoryPath, Username, timeout.Token)
                 .GetAwaiter()

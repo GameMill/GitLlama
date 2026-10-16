@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-16
+
+- Keep clone, fetch, pull, push, and tag transfers in libgit2 while using .NET's HTTPS transport to avoid misleading native TLS decryption failures. Stream large uploads, release connections before browser sign-in, preserve cancellation, and keep credentials scoped to their approved host or organization.
+- Use the in-app key unlock and server fingerprint confirmation for direct SSH transfers. Prompt for unfamiliar hosts in SSH agent mode too, and share explicitly approved public host keys with the SSH helper.
 - Restore Microsoft Entra OAuth sign-in for Azure DevOps alongside existing personal access tokens. Sign in with a device code, discover organizations, and allow or revoke each organization's use inside GitLlama. Keep application and directory configuration internal. Renew Microsoft authorization automatically, save the connection securely per profile, and use granted organizations in the repository manager and HTTPS Git operations. Keep PAT connections available for organizations that cannot use directory sign-in.
 - Collapse the Azure DevOps personal access token form by default and mark it deprecated in GitLlama, with Microsoft sign-in preferred for new connections. Existing token connections remain supported.
 

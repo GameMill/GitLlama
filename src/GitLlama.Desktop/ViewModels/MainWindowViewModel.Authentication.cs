@@ -317,6 +317,7 @@ public partial class MainWindowViewModel
                 await Task.Run(
                     () =>
                     {
+                        using var transport = GitTransportScope.Enter(options, _authenticationCancellation.Token);
                         using var remote = LibGit2Sharp
                             .Repository.ListRemoteReferences(
                                 url,

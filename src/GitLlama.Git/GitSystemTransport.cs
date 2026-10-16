@@ -529,21 +529,23 @@ public static class GitSystemTransport
         options.EnsureAzureAccess(url);
         if (IsSsh(url))
         {
-            await RunAsync(repositoryPath, ["ls-remote", "--", url, "HEAD"], options, ct, ssh: true, sshRemoteUrl: url)
-                .ConfigureAwait(false);
+            await Task.Run(() =>
+            {
+                using var transport = GitTransportScope.Enter(options, ct);
+                foreach (var _ in Repository.ListRemoteReferences(url, options.Fetch(ct).CredentialsProvider))
+                    ct.ThrowIfCancellationRequested();
+            }, ct).ConfigureAwait(false);
             return;
         }
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == "https")
         {
-            if (options.UsesAzureAuthorization(url))
+            await Task.Run(() =>
             {
-                await RunAsync(repositoryPath, ["ls-remote", "--", url, "HEAD"], options, ct).ConfigureAwait(false);
-                return;
-            }
-
-            await GetCredentialsAsync(url, repositoryPath, options.Username, ct).ConfigureAwait(false);
-            await RunAsync(repositoryPath, ["ls-remote", "--", url, "HEAD"], options, ct).ConfigureAwait(false);
+                using var transport = GitTransportScope.Enter(options, ct);
+                foreach (var _ in Repository.ListRemoteReferences(url, options.Fetch(ct).CredentialsProvider))
+                    ct.ThrowIfCancellationRequested();
+            }, ct).ConfigureAwait(false);
             return;
         }
 

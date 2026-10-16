@@ -148,6 +148,7 @@ public sealed class GitTagService
         Task.Run(
             () =>
             {
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
                 ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
@@ -160,24 +161,6 @@ public sealed class GitTagService
                     repository.Tags[tagName] ?? throw new InvalidOperationException($"Tag '{tagName}' does not exist.");
                 cancellationToken.ThrowIfCancellationRequested();
                 network?.EnsureAzureAccess(remote.PushUrl ?? remote.Url);
-                if (
-                    GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url)
-                    || network?.UsesAzureAuthorization(remote.PushUrl ?? remote.Url) == true
-                )
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            repositoryPath,
-                            ["push", "--", remote.Name, $"refs/tags/{tag.FriendlyName}:refs/tags/{tag.FriendlyName}"],
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url),
-                            sshRemoteUrl: remote.PushUrl ?? remote.Url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                    return;
-                }
 
                 repository.Network.Push(
                     remote,
@@ -199,6 +182,7 @@ public sealed class GitTagService
         Task.Run(
             () =>
             {
+                using var transport = GitTransportScope.Enter(network, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
                 ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
@@ -209,31 +193,11 @@ public sealed class GitTagService
                     ?? throw new InvalidOperationException($"Remote '{remoteName}' does not exist.");
                 cancellationToken.ThrowIfCancellationRequested();
                 network?.EnsureAzureAccess(remote.PushUrl ?? remote.Url);
-                if (
-                    GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url)
-                    || network?.UsesAzureAuthorization(remote.PushUrl ?? remote.Url) == true
-                )
-                {
-                    GitSystemTransport
-                        .RunAsync(
-                            repositoryPath,
-                            ["push", "--", remote.Name, $":refs/tags/{tagName}"],
-                            network ?? new GitNetworkOptions(),
-                            cancellationToken,
-                            ssh: GitSystemTransport.IsSsh(remote.PushUrl ?? remote.Url),
-                            sshRemoteUrl: remote.PushUrl ?? remote.Url
-                        )
-                        .GetAwaiter()
-                        .GetResult();
-                }
-                else
-                {
-                    repository.Network.Push(
-                        remote,
-                        $":refs/tags/{tagName}",
-                        (network ?? new GitNetworkOptions()).Push(cancellationToken)
-                    );
-                }
+                repository.Network.Push(
+                    remote,
+                    $":refs/tags/{tagName}",
+                    (network ?? new GitNetworkOptions()).Push(cancellationToken)
+                );
             },
             cancellationToken
         );
