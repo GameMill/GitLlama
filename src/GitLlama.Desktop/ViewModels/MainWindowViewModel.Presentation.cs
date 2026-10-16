@@ -24,9 +24,9 @@ public partial class MainWindowViewModel
         : ChangeCount == 0 ? "Working directory is clean"
         : $"{ChangeCount} working changes · View changes";
     public ObservableCollection<string> OperationLog { get; } = [];
-    public ObservableCollection<WorkingFileRow> WorkingFiles { get; } = [];
-    public ObservableCollection<WorkingFileRow> StagedFiles { get; } = [];
-    public ObservableCollection<WorkingFileRow> UnstagedFiles { get; } = [];
+    public ObservableCollection<WorkingFileRow> WorkingFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
+    public ObservableCollection<WorkingFileRow> StagedFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
+    public ObservableCollection<WorkingFileRow> UnstagedFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
     public string StagedFilesCaption => $"Staged changes ({StagedFiles.Count})";
     public string UnstagedFilesCaption => $"Unstaged changes ({UnstagedFiles.Count})";
     public WorkingFileRow? SelectedStagedFile => ReviewStagedPatch ? SelectedWorkingFile : null;

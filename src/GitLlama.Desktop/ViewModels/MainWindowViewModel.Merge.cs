@@ -40,8 +40,8 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private bool isConflictResolver;
 
-    public ObservableCollection<WorkingFileRow> ConflictedFiles { get; } = [];
-    public ObservableCollection<WorkingFileRow> ResolvedFiles { get; } = [];
+    public ObservableCollection<WorkingFileRow> ConflictedFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
+    public ObservableCollection<WorkingFileRow> ResolvedFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
     public string ConflictedFilesCaption => $"Conflicted files ({ConflictedFiles.Count})";
     public string ResolvedFilesCaption => $"Resolved files ({ResolvedFiles.Count})";
     public bool HasResolvedFiles => ResolvedFiles.Count > 0;

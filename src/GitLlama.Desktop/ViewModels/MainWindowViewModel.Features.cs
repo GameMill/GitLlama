@@ -25,8 +25,8 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private GitSubmoduleInfo? selectedSubmodule;
-    public ObservableCollection<GitFileInfo> RepositoryFiles { get; } = [];
-    public ObservableCollection<GitFileInfo> FilteredRepositoryFiles { get; } = [];
+    public ObservableCollection<GitFileInfo> RepositoryFiles { get; } = new BatchObservableCollection<GitFileInfo>();
+    public ObservableCollection<GitFileInfo> FilteredRepositoryFiles { get; } = new BatchObservableCollection<GitFileInfo>();
     public ObservableCollection<GitPatchLine> PatchLines { get; } = [];
     public ObservableCollection<string> HistoryScopes { get; } = ["All branches", "Current branch"];
     public ObservableCollection<HostingItem> PullRequests { get; } = [];
@@ -660,13 +660,8 @@ public partial class MainWindowViewModel
 
     private void FilterRepositoryFiles()
     {
-        FilteredRepositoryFiles.Clear();
-        foreach (
-            var file in RepositoryFiles.Where(f => f.Path.Contains(FileSearch, StringComparison.OrdinalIgnoreCase))
-        )
-        {
-            FilteredRepositoryFiles.Add(file);
-        }
+        CollectionUpdates.Sync(FilteredRepositoryFiles,
+            RepositoryFiles.Where(f => f.Path.Contains(FileSearch, StringComparison.OrdinalIgnoreCase)), file => file.Path);
     }
 
     partial void OnSelectedRepositoryFileChanged(GitFileInfo? value) => _ = PreviewRepositoryFileAsync(value);
@@ -812,11 +807,12 @@ public partial class MainWindowViewModel
         OnPropertyChanged(nameof(HistoryCaption));
     }
 
-    private async Task RefreshFeatureListsAsync(string path, long version, long refreshVersion)
+    private async Task RefreshFeatureListsAsync(
+        string path, long version, long refreshVersion, IReadOnlyList<ChangedFile> changes)
     {
         var worktrees = await _worktrees.ListAsync(path);
         var reflog = await new GitReflogService().ListAsync(path);
-        var files = await new GitFileBrowserService().ListAsync(path);
+        var files = await new GitFileBrowserService().ListAsync(path, changes);
         var conflicts = await new GitConflictDetectionService().ListAsync(path);
         var submodules = await new GitSubmoduleService().ListAsync(path);
         var lfs = await new GitLfsService().GetStatusAsync(path);
@@ -842,11 +838,7 @@ public partial class MainWindowViewModel
             Reflog.Add(entry);
         }
 
-        RepositoryFiles.Clear();
-        foreach (var file in files)
-        {
-            RepositoryFiles.Add(file);
-        }
+        CollectionUpdates.Sync(RepositoryFiles, files, file => file.Path);
 
         FilterRepositoryFiles();
         MergeConflicts.Clear();

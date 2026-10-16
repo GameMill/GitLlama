@@ -37,6 +37,71 @@ public static class TestAppBuilder
 public sealed class WorkspaceTests
 {
     [AvaloniaFact]
+    public async Task LargeWorkingChangeRefreshBatchesListsAndPreservesUnchangedRows()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var rows = Enumerable.Range(0, 5000)
+            .Select(i => new WorkingFileRow("ModifiedInWorkdir  " + i, $"src/File{i:D5}.cs", "ModifiedInWorkdir"))
+            .ToArray();
+        var updates = 0;
+        vm.UnstagedFiles.CollectionChanged += (_, _) => updates++;
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        CollectionUpdates.Sync(vm.WorkingFiles, rows, row => row.Path);
+        elapsed.Stop();
+        Console.WriteLine($"5,000 working rows: {elapsed.Elapsed.TotalMilliseconds:F0} ms; unstaged list notifications: {updates}");
+        Assert.Equal(5000, vm.UnstagedFiles.Count);
+        Assert.Equal(1, updates);
+        updates = 0;
+        var retained = vm.UnstagedFiles[2500];
+        CollectionUpdates.Sync(vm.WorkingFiles, rows.Select(row => row with { }), row => row.Path);
+        Assert.Equal(0, updates);
+        Assert.Same(retained, vm.UnstagedFiles[2500]);
+        CollectionUpdates.Sync(vm.WorkingFiles, rows.Take(2), row => row.Path);
+        Assert.Equal(2, vm.UnstagedFiles.Count);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CheckoutPreservesFiveThousandLocalFilesAndRefreshesTheirStatus(bool committed)
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var originalBranch = vm.CurrentBranch;
+        await new GitBranchService().CreateAsync(fixture.RepositoryPath, "large-checkout", checkout: committed);
+        var folder = Path.Combine(fixture.RepositoryPath, "checkout-local-files");
+        Directory.CreateDirectory(folder);
+        for (var i = 0; i < 5000; i++)
+            File.WriteAllText(Path.Combine(folder, $"File{i:D5}.txt"), "preserve local work");
+        if (committed)
+        {
+            using (var repository = new Repository(fixture.RepositoryPath))
+            {
+                Commands.Stage(repository, "checkout-local-files");
+                var signature = new Signature("Test", "test@example.invalid", DateTimeOffset.UtcNow);
+                repository.Commit("Add 5,000 files on target branch", signature, signature);
+            }
+            await new GitBranchService().CheckoutAsync(fixture.RepositoryPath, originalBranch);
+        }
+        vm.SelectedBranchLine = "large-checkout";
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        await vm.CheckoutBranchCommand.ExecuteAsync(null);
+        elapsed.Stop();
+        Console.WriteLine($"Checkout and full refresh with 5,000 files (committed={committed}): {elapsed.Elapsed.TotalMilliseconds:F0} ms");
+        Assert.Equal("large-checkout", vm.CurrentBranch);
+        Assert.Equal(committed ? 0 : 5000, vm.UnstagedFiles.Count(file => file.Path.StartsWith("checkout-local-files/")));
+        Assert.Equal(5000, vm.RepositoryFiles.Count(file => file.Path.StartsWith("checkout-local-files/")));
+        Assert.Equal("preserve local work", File.ReadAllText(Path.Combine(folder, "File04999.txt")));
+        var overview = await new LibGitOverviewReader().ReadOverviewAsync(fixture.RepositoryPath);
+        var browser = new GitFileBrowserService();
+        Assert.Equal(await browser.ListAsync(fixture.RepositoryPath),
+            await browser.ListAsync(fixture.RepositoryPath, overview.Changes));
+    }
+
+    [AvaloniaFact]
     public async Task WorkspaceRendersAndSearchKeepsRepositoryOpen()
     {
         using var fixture = new WorkspaceFixture();

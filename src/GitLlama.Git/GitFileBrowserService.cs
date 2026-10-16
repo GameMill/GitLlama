@@ -1,4 +1,5 @@
 using LibGit2Sharp;
+using GitLlama.Core;
 
 namespace GitLlama.Git;
 
@@ -55,6 +56,15 @@ public sealed class GitFileBrowserService
         );
 
     public Task<IReadOnlyList<GitFileInfo>> ListAsync(string path, CancellationToken ct = default) =>
+        ListCoreAsync(path, null, ct);
+
+    /// <summary>Uses the working-tree snapshot already read during this refresh.</summary>
+    public Task<IReadOnlyList<GitFileInfo>> ListAsync(
+        string path, IReadOnlyList<ChangedFile> changes, CancellationToken ct = default) =>
+        ListCoreAsync(path, changes, ct);
+
+    private Task<IReadOnlyList<GitFileInfo>> ListCoreAsync(
+        string path, IReadOnlyList<ChangedFile>? changes, CancellationToken ct) =>
         Task.Run<IReadOnlyList<GitFileInfo>>(
             () =>
             {
@@ -64,7 +74,9 @@ public sealed class GitFileBrowserService
                     return [];
                 }
 
-                var status = repo.RetrieveStatus(
+                var status = changes is not null
+                    ? changes.ToDictionary(entry => entry.Path, entry => entry.State, StringComparer.Ordinal)
+                    : repo.RetrieveStatus(
                         new StatusOptions { IncludeIgnored = false, RecurseUntrackedDirs = true }
                     )
                     .Where(e => (e.State & FileStatus.Ignored) == 0)

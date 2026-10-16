@@ -1036,7 +1036,7 @@ public partial class MainWindowViewModel : ObservableObject
         InspectorText = "Branch: " + value;
     }
 
-    public ObservableCollection<string> ChangeLines { get; } = [];
+    public ObservableCollection<string> ChangeLines { get; } = new BatchObservableCollection<string>();
     public ObservableCollection<string> BranchLines { get; } = [];
     private readonly JsonSettingsStore _settings;
     private readonly SemaphoreSlim _saveLock = new(1, 1);
@@ -1622,7 +1622,7 @@ public partial class MainWindowViewModel : ObservableObject
                 Upstream = tracked;
             }
 
-            await RefreshFeatureListsAsync(repo.Path, version, refreshVersion);
+            await RefreshFeatureListsAsync(repo.Path, version, refreshVersion, overview.Changes);
             if (
                 version != Interlocked.Read(ref _repositorySelectionVersion)
                 || refreshVersion != Interlocked.Read(ref _refreshRevision)
