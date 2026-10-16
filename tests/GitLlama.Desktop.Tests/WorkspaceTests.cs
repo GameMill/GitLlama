@@ -47,7 +47,7 @@ public sealed class WorkspaceTests
         var store = new JsonSettingsStore(fixture.SettingsPath);
         await store.SaveAsync(new GitLlamaSettings(
             [new RepositoryInfo(fixture.RepositoryPath, "StoneForge")], fixture.RepositoryPath,
-            AutoRefresh: false, LoadAvatars: false));
+            AutoRefresh: true, LoadAvatars: false));
         using var vm = new MainWindowViewModel(sessions, store, new GitWorkingTreeService());
         var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
         try
@@ -62,6 +62,7 @@ public sealed class WorkspaceTests
             SavePreview(window, "startup-llama.png");
             reader.Release.TrySetResult();
             await vm.Initialization;
+            await WaitUntilAsync(() => !vm.IsLoading);
             Assert.False(vm.IsStarting);
             Assert.False(vm.IsLoading);
             Assert.True(vm.IsWorkspaceInteractive);
@@ -70,6 +71,9 @@ public sealed class WorkspaceTests
                 Assert.Contains("Startup repository unavailable", vm.Status);
             else
                 Assert.NotEmpty(vm.HistoryRows);
+            var reads = reader.Reads;
+            await Task.Delay(800);
+            Assert.Equal(reads, reader.Reads);
         }
         finally
         {
@@ -83,10 +87,12 @@ public sealed class WorkspaceTests
     {
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Entered { get; private set; }
+        public int Reads { get; private set; }
         public bool IsRepository(string path) => Repository.IsValid(path);
         public async Task<RepositorySnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
         {
             Entered = true;
+            Reads++;
             await Release.Task.WaitAsync(cancellationToken);
             if (fail)
                 throw new IOException("Startup repository unavailable");

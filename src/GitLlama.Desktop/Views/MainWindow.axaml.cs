@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private readonly GitLlamaDockFactory _factory = new();
     private readonly DockSerializer _serializer = new();
     private readonly string _layoutPath;
+    private bool _hasActivated;
 
     public MainWindow()
         : this(null) { }
@@ -57,6 +58,7 @@ public partial class MainWindow : Window
                 return;
             }
 
+            vm.IsOpeningWindow = true;
             vm.DockDocument = ShowDocument;
             vm.OpenIntegrationBrowser ??= LaunchIntegrationBrowserAsync;
             vm.SshSession.RequestPassphrase = async (request, ct) =>
@@ -99,7 +101,14 @@ public partial class MainWindow : Window
         };
         Activated += async (_, _) =>
         {
-            if (DataContext is MainWindowViewModel vm)
+            // Startup already opens and reconciles the repository before revealing the workspace.
+            if (!_hasActivated)
+            {
+                _hasActivated = true;
+                return;
+            }
+
+            if (DataContext is MainWindowViewModel { IsLoading: false } vm)
             {
                 await vm.RefreshFromWatcherAsync();
             }
@@ -149,14 +158,22 @@ public partial class MainWindow : Window
     private async void OnOpened(object? sender, EventArgs e)
     {
         UpdateNativeShadow();
-        if (DataContext is MainWindowViewModel vm)
+        var vm = DataContext as MainWindowViewModel;
+        try
         {
-            await vm.Initialization;
-        }
+            if (vm is not null)
+                await vm.Initialization;
 
-        RestoreLayout();
-        SynchronizeDocumentTabs();
-        (DataContext as MainWindowViewModel)?.StartRepositoryMonitoring();
+            RestoreLayout();
+            SynchronizeDocumentTabs();
+            if (vm is not null)
+                await vm.StartRepositoryMonitoringAsync();
+        }
+        finally
+        {
+            if (vm is not null)
+                vm.IsOpeningWindow = false;
+        }
     }
 
     private async Task<bool> LaunchIntegrationBrowserAsync(Uri uri) =>

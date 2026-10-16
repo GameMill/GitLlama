@@ -8,6 +8,10 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(IsLoading), nameof(LoadingTitle), nameof(LoadingTarget), nameof(IsWorkspaceInteractive))]
     private bool isStarting = true;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLoading), nameof(LoadingTitle), nameof(LoadingTarget), nameof(IsWorkspaceInteractive))]
+    private bool isOpeningWindow;
+
     private Task _repositoryActivation = Task.CompletedTask;
 
     [ObservableProperty]
@@ -19,9 +23,9 @@ public partial class MainWindowViewModel
     [NotifyPropertyChangedFor(nameof(LoadingTarget))]
     private string branchSwitchTarget = "";
 
-    public bool IsLoading => IsStarting || IsBranchSwitching;
-    public string LoadingTitle => IsStarting ? "Starting GitLlama" : "Switching branches";
-    public string LoadingTarget => IsStarting ? "Loading your workspace" : BranchSwitchTarget;
+    public bool IsLoading => IsStarting || IsOpeningWindow || IsBranchSwitching;
+    public string LoadingTitle => IsStarting || IsOpeningWindow ? "Starting GitLlama" : "Switching branches";
+    public string LoadingTarget => IsStarting || IsOpeningWindow ? "Loading your workspace" : BranchSwitchTarget;
     public bool IsWorkspaceInteractive => !IsSettingsOpen && !IsLoading;
 
     partial void OnIsSettingsOpenChanged(bool value) => OnPropertyChanged(nameof(IsWorkspaceInteractive));

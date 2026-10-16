@@ -47,10 +47,12 @@ public partial class MainWindowViewModel : IDisposable
         }
     }
 
-    internal void StartRepositoryMonitoring()
+    internal void StartRepositoryMonitoring() => _ = StartRepositoryMonitoringAsync();
+
+    internal async Task StartRepositoryMonitoringAsync()
     {
         _monitoringEnabled = true;
-        _ = ConfigureWatcherAsync();
+        await ConfigureWatcherAsync();
     }
 
     internal void StopRepositoryMonitoring()
