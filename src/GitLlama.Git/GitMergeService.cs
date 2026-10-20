@@ -30,14 +30,9 @@ public sealed class GitMergeService
                 var branch =
                     repository.Branches[branchName]
                     ?? throw new ArgumentException("Branch not found.", nameof(branchName));
-                if (branch.IsRemote)
-                {
-                    throw new InvalidOperationException(
-                        "Merge a local branch or create a local tracking branch first."
-                    );
-                }
-
                 cancellationToken.ThrowIfCancellationRequested();
+                // Merge the selected local or remote-tracking tip into HEAD. No source checkout or local tracking
+                // branch is needed, and other local branches must retain their existing references.
                 var result = repository.Merge(
                     branch,
                     new Signature("GitLlama", "gitllama@localhost", DateTimeOffset.UtcNow),
