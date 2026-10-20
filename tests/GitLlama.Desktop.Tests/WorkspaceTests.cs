@@ -1755,6 +1755,17 @@ public sealed class WorkspaceTests
             Assert.False(repo.RetrieveStatus("src/Auth.cs").HasFlag(FileStatus.ModifiedInIndex));
             Assert.Equal("Improve authentication", vm.CommitSummaryText);
             Assert.Equal("Validate login input before authentication.", vm.CommitDescriptionText);
+            var addedPath = Path.Combine(fixture.RepositoryPath, "new-file.txt");
+            File.WriteAllText(addedPath, "staged addition\n");
+            await new GitWorkingTreeService().StageAsync(fixture.RepositoryPath, "new-file.txt");
+            File.AppendAllText(addedPath, "unstaged modification\n");
+            await vm.RefreshCommand.ExecuteAsync(null);
+            Assert.Equal("Added", vm.StagedFiles.Single(file => file.Path == "new-file.txt").StagedStatus);
+            Assert.Equal("Modified", vm.UnstagedFiles.Single(file => file.Path == "new-file.txt").UnstagedStatus);
+            File.Delete(addedPath);
+            await vm.RefreshCommand.ExecuteAsync(null);
+            Assert.Equal("Added", vm.StagedFiles.Single(file => file.Path == "new-file.txt").StagedStatus);
+            Assert.Equal("Deleted", vm.UnstagedFiles.Single(file => file.Path == "new-file.txt").UnstagedStatus);
         }
         finally
         {

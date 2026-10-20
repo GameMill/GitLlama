@@ -1,6 +1,41 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GitLlama.Desktop.Views.InspectorView">
+    <UserControl.Styles>
+        <Style Selector="ListBox.commit-files">
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="ListBox.commit-files ListBoxItem">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="4,2" />
+        </Style>
+        <Style Selector="Expander.change-group">
+            <Setter Property="IsExpanded" Value="True" />
+        </Style>
+        <Style Selector="Expander.change-group.empty">
+            <Setter Property="IsExpanded" Value="False" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="Expander.change-group.empty /template/ ToggleButton">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+        </Style>
+        <Style Selector="Expander.change-group /template/ ToggleButton">
+            <Setter Property="MinHeight" Value="26" />
+            <Setter Property="Padding" Value="6,3" />
+        </Style>
+        <Style Selector="Border.file-status">
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="5,2" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.file-status TextBlock">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Styles>
     <Border Background="{StaticResource InspectorBrush}"
             BorderBrush="#393E47"
             BorderThickness="1"
@@ -69,8 +104,8 @@
             <Grid IsVisible="{Binding IsWorkingTreeInspector}" RowDefinitions="Auto,*,Auto">
                 <Border BorderBrush="#393E47"
                         BorderThickness="0,0,0,1"
-                        Padding="16,14">
-                    <StackPanel Spacing="7">
+                        Padding="12,10">
+                    <StackPanel Spacing="4">
                         <DockPanel>
                             <Border DockPanel.Dock="Right"
                                     Background="#404249"
@@ -80,7 +115,7 @@
                             </Border>
 
                             <TextBlock Text="{Binding WorkingInspectorTitle}"
-                                       FontSize="20"
+                                       FontSize="18"
                                        FontWeight="SemiBold" />
                         </DockPanel>
 
@@ -137,7 +172,7 @@
                 <ScrollViewer AllowAutoHide="False"
                               Grid.Row="1"
                               HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="8" Spacing="8">
+                    <StackPanel Margin="8,4" Spacing="4">
                         <TextBlock Text="Everything is up to date."
                                    IsVisible="{Binding HasNoChanges}"
                                    Classes="muted"
@@ -233,11 +268,12 @@
                             </ListBox>
                         </Expander>
 
-                        <Expander Classes="navigation"
+                        <Expander Classes="navigation change-group"
+                                  Classes.empty="{Binding !HasStagedFiles}"
                                   Header="{Binding StagedFilesCaption}"
-                                  IsExpanded="True"
                                   IsVisible="{Binding IsCommitInspector}">
-                            <ListBox Classes="file-list"
+                            <ListBox Classes="file-list commit-files"
+                                     IsVisible="{Binding HasStagedFiles}"
                                      ItemsSource="{Binding StagedFiles}"
                                      SelectedItem="{Binding SelectedStagedFile, Mode=OneWay}"
                                      SelectionChanged="StagedFile_SelectionChanged"
@@ -245,19 +281,20 @@
                                      MaxHeight="300">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid ColumnDefinitions="26,30,*,Auto,20" ColumnSpacing="6">
+                                        <Grid ColumnDefinitions="22,24,*,Auto,Auto" ColumnSpacing="4">
                                             <CheckBox IsChecked="True"
                                                       Tag="unstage"
                                                       Click="StageCheckbox_Click"
                                                       ToolTip.Tip="Unstage this file"
+                                                      MinWidth="0" Padding="0"
                                                       VerticalAlignment="Center" />
 
                                             <Border Grid.Column="1"
                                                     Background="#454750"
                                                     CornerRadius="4"
                                                     Padding="3"
-                                                    Width="27"
-                                                    Height="26">
+                                                    Width="22"
+                                                    Height="22">
                                                 <TextBlock Text="{Binding FileIcon}"
                                                            FontSize="10"
                                                            HorizontalAlignment="Center"
@@ -296,10 +333,10 @@
                                                   ToolTip.Tip="{Binding LockToolTip}" />
                                             </StackPanel>
 
-                                            <TextBlock Grid.Column="4"
-                                                       Text="{Binding StatusCode}"
-                                                       Foreground="#76D999"
-                                                       VerticalAlignment="Center" />
+                                            <Border Grid.Column="4" Classes="file-status"
+                                                    Background="{Binding StagedStatusBackground}">
+                                                <TextBlock Text="{Binding StagedStatus}" Foreground="{Binding StagedStatusColor}" />
+                                            </Border>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -310,11 +347,12 @@
                                 BorderThickness="0,1,0,0"
                                 IsVisible="{Binding IsCommitInspector}" />
 
-                        <Expander Classes="navigation"
+                        <Expander Classes="navigation change-group"
+                                  Classes.empty="{Binding !HasUnstagedFiles}"
                                   Header="{Binding UnstagedFilesCaption}"
-                                  IsExpanded="True"
                                   IsVisible="{Binding IsCommitInspector}">
-                            <ListBox Classes="file-list"
+                            <ListBox Classes="file-list commit-files"
+                                     IsVisible="{Binding HasUnstagedFiles}"
                                      ItemsSource="{Binding UnstagedFiles}"
                                      SelectedItem="{Binding SelectedUnstagedFile, Mode=OneWay}"
                                      SelectionChanged="UnstagedFile_SelectionChanged"
@@ -322,19 +360,20 @@
                                      MaxHeight="300">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid ColumnDefinitions="26,30,*,Auto,20" ColumnSpacing="6">
+                                        <Grid ColumnDefinitions="22,24,*,Auto,Auto" ColumnSpacing="4">
                                             <CheckBox IsChecked="False"
                                                       Tag="stage"
                                                       Click="StageCheckbox_Click"
                                                       ToolTip.Tip="Stage this file"
+                                                      MinWidth="0" Padding="0"
                                                       VerticalAlignment="Center" />
 
                                             <Border Grid.Column="1"
                                                     Background="#383A40"
                                                     CornerRadius="4"
                                                     Padding="3"
-                                                    Width="27"
-                                                    Height="26">
+                                                    Width="22"
+                                                    Height="22">
                                                 <TextBlock Text="{Binding FileIcon}"
                                                            FontSize="10"
                                                            HorizontalAlignment="Center"
@@ -373,10 +412,10 @@
                                                   ToolTip.Tip="{Binding LockToolTip}" />
                                             </StackPanel>
 
-                                            <TextBlock Grid.Column="4"
-                                                       Text="{Binding StatusCode}"
-                                                       Foreground="{Binding StatusColor}"
-                                                       VerticalAlignment="Center" />
+                                            <Border Grid.Column="4" Classes="file-status"
+                                                    Background="{Binding UnstagedStatusBackground}">
+                                                <TextBlock Text="{Binding UnstagedStatus}" Foreground="{Binding UnstagedStatusColor}" />
+                                            </Border>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -410,8 +449,8 @@
                         Background="#313338"
                         BorderBrush="#393E47"
                         BorderThickness="0,1,0,0"
-                        Padding="14">
-                    <StackPanel Spacing="9">
+                        Padding="10">
+                    <StackPanel Spacing="6">
                         <StackPanel.Styles>
                             <Style Selector="RadioButton.mode-tab">
                                 <Setter Property="Background" Value="Transparent" />
@@ -466,7 +505,7 @@
                                      Watermark="Description (optional)"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
-                                     Height="76" />
+                                     Height="64" />
 
                             <CheckBox Content="Amend latest unpublished commit" IsChecked="{Binding AmendStagedCommit}" />
                             <TextBlock Text="Leave the message blank to keep the current commit message."

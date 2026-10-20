@@ -29,6 +29,8 @@ public partial class MainWindowViewModel
     public ObservableCollection<WorkingFileRow> UnstagedFiles { get; } = new BatchObservableCollection<WorkingFileRow>();
     public string StagedFilesCaption => $"Staged changes ({StagedFiles.Count})";
     public string UnstagedFilesCaption => $"Unstaged changes ({UnstagedFiles.Count})";
+    public bool HasStagedFiles => StagedFiles.Count > 0;
+    public bool HasUnstagedFiles => UnstagedFiles.Count > 0;
     public WorkingFileRow? SelectedStagedFile => ReviewStagedPatch ? SelectedWorkingFile : null;
     public WorkingFileRow? SelectedUnstagedFile => ReviewStagedPatch ? null : SelectedWorkingFile;
     public ObservableCollection<HistoryFileRow> HistoryFileRows { get; } = [];
@@ -135,6 +137,8 @@ public partial class MainWindowViewModel
             CollectionUpdates.Sync(UnstagedFiles, WorkingFiles.Where(file => file.IsUnstaged), file => file.Path);
             OnPropertyChanged(nameof(StagedFilesCaption));
             OnPropertyChanged(nameof(UnstagedFilesCaption));
+            OnPropertyChanged(nameof(HasStagedFiles));
+            OnPropertyChanged(nameof(HasUnstagedFiles));
             NotifyStashAvailability();
             NotifyMergeState();
         };

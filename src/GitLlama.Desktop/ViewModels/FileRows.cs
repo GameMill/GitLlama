@@ -50,10 +50,39 @@ public sealed record WorkingFileRow(string Line, string Path, string State)
         : State.Contains("Renamed", StringComparison.Ordinal) ? "Renamed"
         : State.Contains("New", StringComparison.Ordinal) ? "Added"
         : "Modified";
-    public string StatusColor =>
-        Status == "Deleted" || Status == "Conflict" ? "#F48771"
-        : Status == "Added" ? "#4EC9B0"
-        : "#A6A6A6";
+    public string StatusColor => ColorFor(Status);
+    public string StagedStatus => StatusFor(true);
+    public string UnstagedStatus => StatusFor(false);
+    public string StagedStatusColor => ColorFor(StagedStatus);
+    public string UnstagedStatusColor => ColorFor(UnstagedStatus);
+    public string StagedStatusBackground => BackgroundFor(StagedStatus);
+    public string UnstagedStatusBackground => BackgroundFor(UnstagedStatus);
+
+    private string StatusFor(bool staged)
+    {
+        var suffix = staged ? "InIndex" : "InWorkdir";
+        return State.Contains("Conflicted", StringComparison.Ordinal) ? "Conflict"
+            : State.Contains("DeletedFrom" + (staged ? "Index" : "Workdir"), StringComparison.Ordinal) ? "Deleted"
+            : State.Contains("Renamed" + suffix, StringComparison.Ordinal) ? "Renamed"
+            : State.Contains("New" + suffix, StringComparison.Ordinal) ? "Added"
+            : "Modified";
+    }
+
+    private static string ColorFor(string status) => status switch
+    {
+        "Deleted" or "Conflict" => "#EB969D",
+        "Added" => "#8AD0A4",
+        "Renamed" => "#9DBDE5",
+        _ => "#E0C080"
+    };
+
+    private static string BackgroundFor(string status) => status switch
+    {
+        "Deleted" or "Conflict" => "#422F35",
+        "Added" => "#2C3E34",
+        "Renamed" => "#2D394A",
+        _ => "#403B2E"
+    };
 
     /// <summary>Whether the file is stored in Git LFS.</summary>
     public bool IsLfs { get; init; }
