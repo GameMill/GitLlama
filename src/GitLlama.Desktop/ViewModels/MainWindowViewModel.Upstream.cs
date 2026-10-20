@@ -42,12 +42,15 @@ public partial class MainWindowViewModel
         : Remotes.Count == 0 ? "Add a remote to push and pull."
         : "Choose a remote branch to push to and pull from.";
 
-    /// <summary>Short ahead/behind marker shown in the upstream picker.</summary>
+    /// <summary>Marks a destination that will be created on the next push.</summary>
     public string UpstreamCounts =>
-        Upstream is { Published: true } upstream && (upstream.Ahead > 0 || upstream.Behind > 0)
-            ? $"↑{upstream.Ahead} ↓{upstream.Behind}"
-        : Upstream is { Published: false } ? "new"
+        Upstream is { Published: false } ? "new"
         : "";
+
+    public int PushCommitCount => Upstream is { Published: true } value ? value.Ahead : 0;
+    public int PullCommitCount => Upstream is { Published: true } value ? value.Behind : 0;
+    public bool HasPushCommits => PushCommitCount > 0;
+    public bool HasPullCommits => PullCommitCount > 0;
 
     public string PushToolTip =>
         PushRemoteName is { } remote
@@ -77,6 +80,10 @@ public partial class MainWindowViewModel
                 nameof(UpstreamCaption),
                 nameof(UpstreamDetail),
                 nameof(UpstreamCounts),
+                nameof(PushCommitCount),
+                nameof(PullCommitCount),
+                nameof(HasPushCommits),
+                nameof(HasPullCommits),
                 nameof(PushToolTip),
                 nameof(PullToolTip),
                 nameof(FetchToolTip),

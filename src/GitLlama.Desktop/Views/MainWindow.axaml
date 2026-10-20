@@ -448,17 +448,33 @@
                                         Command="{Binding FetchUpstreamCommand}"
                                         ToolTip.Tip="{Binding FetchToolTip}" />
 
+                                <Grid>
                                 <Button x:Name="PullButton"
                                         Classes="workspace repository-action"
+                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                         Content="↓  Pull"
                                         Command="{Binding PullFastForwardCommand}"
                                         ToolTip.Tip="{Binding PullToolTip}" />
+                                    <Canvas IsHitTestVisible="False">
+                                        <Border Classes="sync-count" Canvas.Right="-4" Canvas.Top="-6" IsVisible="{Binding HasPullCommits}">
+                                            <TextBlock Text="{Binding PullCommitCount}" />
+                                        </Border>
+                                    </Canvas>
+                                </Grid>
 
+                                <Grid>
                                 <Button x:Name="PushButton"
                                         Classes="workspace repository-action"
+                                        HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                                         Content="↑  Push"
                                         Command="{Binding PushToUpstreamCommand}"
                                         ToolTip.Tip="{Binding PushToolTip}" />
+                                    <Canvas IsHitTestVisible="False">
+                                        <Border Classes="sync-count" Canvas.Right="-4" Canvas.Top="-6" IsVisible="{Binding HasPushCommits}">
+                                            <TextBlock Text="{Binding PushCommitCount}" />
+                                        </Border>
+                                    </Canvas>
+                                </Grid>
 
                                 <Button x:Name="RefreshButton"
                                         Classes="workspace repository-action"
