@@ -82,6 +82,7 @@ public partial class NavigationView : UserControl
     public NavigationView()
     {
         AvaloniaXamlLoader.Load(this);
+        InitializePullRequestNavigation();
         foreach (var category in this.GetLogicalDescendants().OfType<Expander>()
                      .Where(expander => expander.Classes.Contains("navigation")).ToArray())
         {

@@ -15,7 +15,13 @@ public sealed record HostingItem(
     string BaseBranch
 )
 {
-    public override string ToString() => $"#{Number}  {Title} · {State} · {Author}";
+    public IReadOnlyList<string> Assignees { get; init; } = [];
+    public IReadOnlyList<string> RequestedReviewers { get; init; } = [];
+    public bool IsDraft { get; init; }
+    public bool IsMerged { get; init; }
+    public HostingRepository? Repository { get; init; }
+    public override string ToString() => (Repository is null ? "" : $"{Repository.Owner}/{Repository.Name} · ")
+        + $"#{Number}  {Title} · {State} · {Author}";
 }
 
 public sealed record HostingComment(string Author, string Body, DateTimeOffset Date)
@@ -27,6 +33,7 @@ public sealed record HostingPage(IReadOnlyList<HostingItem> Items, bool HasMore)
 
 public interface IHostingProvider
 {
+    Task<string> AuthenticatedUserAsync(string token, CancellationToken ct = default) => Task.FromResult("");
     Task<HostingPage> ListAsync(
         HostingRepository repository,
         bool pullRequests,

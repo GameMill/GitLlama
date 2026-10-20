@@ -72,6 +72,7 @@ public partial class MainWindowViewModel
 
         CollectionUpdates.Sync(RemoteTree, roots, node => node.Key);
         AvatarCache.GitHubToken = () => IsGithubConnected ? GithubUsableToken : "";
+        UpdatePullRequestSources();
         AvatarCache.GitHubRepositories = Remotes
             .OrderBy(r => r.Name != "origin")
             .Select(r => GitLlama.Providers.GitHubProvider.FromRemote(r.Url))

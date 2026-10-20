@@ -91,6 +91,7 @@ public partial class MainWindowViewModel
 
     private void PublishGithubConnection(GithubStoredConnection connection)
     {
+        var accountChanged = !string.Equals(_githubConnection?.Login, connection.Login, StringComparison.OrdinalIgnoreCase);
         _githubConnection = connection;
         _applyingGithubConnection = true;
         try
@@ -105,6 +106,9 @@ public partial class MainWindowViewModel
         GithubSessionExpiresAt = connection.ExpiresAt;
         IsGithubConnected = GithubToken.Length > 0;
         GithubAccountStatus = IsGithubConnected ? "Connected as " + connection.Login : "Reconnecting to GitHub…";
+        if (accountChanged) InvalidateHosting();
+        _pullRequestLogin = connection.Login;
+        RebuildPullRequestTree();
         OnPropertyChanged(nameof(CanDisconnectGithub));
         OnPropertyChanged(nameof(GithubSessionExpiryText));
     }

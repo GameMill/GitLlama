@@ -236,9 +236,9 @@ public partial class MainWindowViewModel
         if (remote is not null && AzureDevOpsRemote.Parse(remote.Url) is not null)
         {
             GithubOwner = GithubRepository = "";
-            InvalidateHosting();
-            HostingStatus =
-                "Azure pull requests and Boards are not connected yet. Use Integrations for Azure repository access.";
+            InvalidateHosting(clearPulls: false);
+            if (RemotePullRequestRepositories().Length == 0)
+                HostingStatus = "Azure pull requests and Boards are not connected yet. Use Integrations for Azure repository access.";
         }
 
         if (repository is not null && (GithubOwner != repository.Owner || GithubRepository != repository.Name))
@@ -246,11 +246,10 @@ public partial class MainWindowViewModel
             Interlocked.Increment(ref _hostingRevision);
             GithubOwner = repository.Owner;
             GithubRepository = repository.Name;
-            PullRequests.Clear();
             Issues.Clear();
             HostingComments.Clear();
-            SelectedPullRequest = SelectedIssue = null;
-            HasMorePullRequests = HasMoreIssues = false;
+            SelectedIssue = null;
+            HasMoreIssues = false;
             _pullPage = _issuePage = 1;
             HostingDetails = "Select a pull request or issue.";
         }
@@ -329,6 +328,8 @@ public partial class MainWindowViewModel
         UpdateSubmoduleCommand.Cancel();
         OpenSubmoduleCommand.Cancel();
         SwitchSubmoduleCommand.Cancel();
+        MergePullRequestIntoCurrentCommand.Cancel();
+        RefreshPullRequestsCommand.Cancel();
         AddSubmoduleCommand.Cancel();
         DownloadLfsFilesCommand.Cancel();
         ChangeRemoteBranchCommand.Cancel();

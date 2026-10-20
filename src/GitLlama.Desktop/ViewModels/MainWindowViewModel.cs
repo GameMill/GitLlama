@@ -1138,6 +1138,7 @@ public partial class MainWindowViewModel : ObservableObject
 
         _hostingProvider = hostingProvider ?? new GitLlama.Providers.GitHubProvider();
         _ownsHostingProvider = hostingProvider is null;
+        InitializePullRequestTree();
         InitializePresentation();
         Initialization = InitializeAsync();
     }

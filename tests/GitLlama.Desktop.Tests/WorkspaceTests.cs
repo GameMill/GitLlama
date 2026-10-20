@@ -1223,8 +1223,10 @@ public sealed class WorkspaceTests
     public async Task HostingCommandsHandleReviewMergeIssuesAndOfflineState()
     {
         using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath)) repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
         var provider = new FakeHostingProvider();
         var vm = await fixture.OpenAsync(provider);
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
         vm.GithubOwner = "owner";
         vm.GithubRepository = "repo";
         vm.GithubToken = "session-token";
@@ -3669,8 +3671,230 @@ public sealed class WorkspaceTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task PullRequestTreeGroupsAssignmentsSearchesAndOffersLocalMerge()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath)) repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        HostingItem Pull(int number, string title, string author) => new(number, title, "Description", "open", author,
+            $"https://github.com/owner/repo/pull/{number}", true, new string('a', 40), "feature/change", "main");
+        var provider = new FakeHostingProvider
+        {
+            Login = "me",
+            Items = [Pull(41, "My change", "ME"), Pull(42, "Authentication update", "contributor") with
+            { Assignees = ["Me"], RequestedReviewers = ["me"], IsDraft = true }, Pull(43, "Other work", "another")]
+        };
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        vm.GithubOwner = "owner";
+        vm.GithubRepository = "repo";
+        vm.GithubToken = "fixture-token";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.Equal(new[] { "1", "1", "1", "3" }, vm.PullRequestTree.Select(node => node.Count));
+        var assigned = vm.PullRequestTree.Single(node => node.Key == "assigned");
+        assigned.IsExpanded = false;
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.False(assigned.IsExpanded);
+        Assert.Equal(42, Assert.Single(Assert.Single(assigned.Children).Children).Item!.Number);
+        vm.PullRequestSearch = "authentication";
+        Assert.Equal(new[] { "0", "1", "1", "1" }, vm.PullRequestTree.Select(node => node.Count));
+        vm.PullRequestSearch = "#43";
+        Assert.Equal("1", vm.PullRequestTree.Single(node => node.Key == "all").Count);
+        vm.PullRequestSearch = "";
+        assigned.IsExpanded = true;
+        var template = new DockContentTemplate(vm);
+        Avalonia.Application.Current!.DataTemplates.Add(template);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var nav = window.GetVisualDescendants().OfType<NavigationView>().First();
+            nav.FindControl<Expander>("PullRequestCategory")!.IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(nav.FindControl<TreeView>("PullRequestTree"));
+            var menu = nav.BuildPullRequestMenu(provider.Items[1]);
+            Assert.Contains(menu.ItemsSource!.Cast<MenuItem>(), item => item.Header!.ToString()!.StartsWith("Merge #42 into"));
+            Assert.True(menu.ItemsSource!.Cast<MenuItem>().Single(item => item.Header!.ToString()!.StartsWith("Merge #42 into")).IsEnabled);
+            var category = nav.FindControl<Expander>("PullRequestCategory")!;
+            var searchBox = nav.FindControl<TextBox>("PullRequestSearchBox")!;
+            var searchPosition = searchBox.TranslatePoint(new Avalonia.Point(0, 0), category);
+            var leaf = vm.PullRequestTree.Single(node => node.Key == "review").Children.Single().Children.Single();
+            vm.SelectedPullRequestNode = leaf;
+            Assert.Equal(42, vm.SelectedPullRequest!.Number);
+            Assert.Null(provider.MergedSha);
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(searchPosition, searchBox.TranslatePoint(new Avalonia.Point(0, 0), category));
+            foreach (var expander in nav.GetVisualDescendants().OfType<Expander>().Where(expander => expander.Classes.Contains("navigation")))
+                expander.IsExpanded = expander.Name == "PullRequestCategory";
+            if (nav.FindControl<Expander>("PullRequestCategory")!.Content is ResizableCategoryPanel panel)
+                panel.Children[0].MaxHeight = 480;
+            SavePreview(window, "pull-request-tree.png");
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+        vm.GithubToken = "";
+        Assert.All(vm.PullRequestTree, group => Assert.Empty(group.Children));
+    }
+
+    [AvaloniaFact]
+    public async Task PullRequestsCombineOnlyCurrentRemotesAndLoadEveryPageWithoutEmptyRepositoryNodes()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+        {
+            repo.Network.Remotes.Add("origin", "https://github.com/fork/repo.git");
+            repo.Network.Remotes.Add("upstream", "git@github.com:team/repo.git");
+            repo.Network.Remotes.Add("alias", "https://github.com/TEAM/repo.git");
+            repo.Network.Remotes.Add("empty", "https://github.com/empty/repo.git");
+            repo.Network.Remotes.Add("azure", "https://dev.azure.com/team/project/_git/repo");
+        }
+        var provider = new FakeHostingProvider { Login = "me" };
+        provider.PageLoader = (repository, _, _, page, _) =>
+        {
+            if (repository.Owner.Equals("empty", StringComparison.OrdinalIgnoreCase))
+                return Task.FromResult(new HostingPage([], false));
+            var item = new HostingItem(page == 1 ? 42 : 43, repository.Owner + " change", "", "open", "me",
+                $"https://github.com/{repository.Owner}/repo/pull/42", true, new string('a', 40), "feature", "main")
+                { Assignees = ["me"], RequestedReviewers = ["me"] };
+            return Task.FromResult(new HostingPage([item], repository.Owner == "fork" && page == 1));
+        };
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 5);
+        vm.GithubToken = "fixture-token";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.Equal(3, vm.PullRequests.Count);
+        Assert.False(vm.HasMorePullRequests);
+        Assert.Equal(4, provider.ListRequests.Count);
+        Assert.Single(provider.ListRequests, request => request.Repository.Owner.Equals("team", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(2, vm.PullRequests.Count(item => item.Number == 42));
+        var all = vm.PullRequestTree.Single(node => node.Key == "all");
+        Assert.Equal(new[] { "fork/repo", "team/repo" }, all.Children.Select(node => node.Name.ToLowerInvariant()));
+        Assert.All(vm.PullRequestTree, group => Assert.DoesNotContain(group.Children, node => node.Name.StartsWith("empty/")));
+        Assert.Equal(3, all.Children.SelectMany(node => node.Children).Select(node => node.Key).Distinct().Count());
+        vm.SelectedRemote = vm.Remotes.Single(remote => remote.Name == "upstream");
+        Assert.Equal(3, vm.PullRequests.Count);
+        var fromFork = vm.PullRequests.First(item => item.Repository!.Owner == "fork");
+        vm.SelectedPullRequest = fromFork;
+        Assert.Equal(fromFork.Repository, provider.CommentRepository);
+        vm.HostingComment = "Reviewed fork PR";
+        await vm.ApprovePullRequestCommand.ExecuteAsync(null);
+        Assert.Equal(fromFork.Repository, provider.ReviewRepository);
+        vm.PullRequestSearch = "team/repo";
+        Assert.Single(all.Children);
+        Assert.Equal("team/repo", all.Children[0].Name.ToLowerInvariant());
+        vm.PullRequestSearch = "";
+        Assert.Equal(2, all.Children.Count);
+
+        var requests = provider.ListRequests.Count;
+        var otherPath = Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "OtherRepository");
+        Repository.Init(otherPath);
+        using (var other = new Repository(otherPath))
+        {
+            File.WriteAllText(Path.Combine(otherPath, "README.md"), "other\n");
+            Commands.Stage(other, "README.md");
+            var author = new Signature("Test", "test@example.invalid", DateTimeOffset.UtcNow);
+            other.Commit("Other repository", author, author);
+        }
+        vm.SelectedRepository = new RepositoryInfo(otherPath, "Other repository");
+        await WaitUntilAsync(() => vm.HistoryRows.Any(row => row.Subject == "Other repository"));
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.Empty(vm.Remotes);
+        Assert.Empty(vm.PullRequests);
+        Assert.All(vm.PullRequestTree, group => Assert.Empty(group.Children));
+        Assert.Equal(requests, provider.ListRequests.Count);
+        // A manually entered or account-owned repository must not expand the current repository's remote scope.
+        vm.GithubOwner = "somewhere-else";
+        vm.GithubRepository = "account-repository";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.Equal(requests, provider.ListRequests.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task PullRequestRefreshIgnoresResponsesFromRemovedRemotes()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/old/repo.git");
+        var response = new TaskCompletionSource<HostingPage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var provider = new FakeHostingProvider { PageLoader = (_, _, _, _, _) => response.Task };
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        var loading = vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => provider.ListRequests.Count == 1);
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Remove("origin");
+        await vm.RefreshCommand.ExecuteAsync(null);
+        await WaitUntilAsync(() => vm.Remotes.Count == 0);
+        response.SetResult(new HostingPage([
+            new HostingItem(42, "Stale PR", "", "open", "me", "https://github.com/old/repo/pull/42", true, "", "feature", "main")
+        ], false));
+        await loading;
+        Assert.Empty(vm.PullRequests);
+        Assert.All(vm.PullRequestTree, group => Assert.Empty(group.Children));
+    }
+
+    [AvaloniaFact]
+    public async Task PullRequestRightClickOpensMenuWithoutNavigatingOrCrashing()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var vm = await fixture.OpenAsync(new FakeHostingProvider());
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        var navigations = new List<string>();
+        vm.DockDocument = navigations.Add;
+        var nav = new NavigationView { DataContext = vm };
+        var window = new Window { Content = nav, Width = 400, Height = 900 };
+        try
+        {
+            window.Show();
+            foreach (var expander in nav.GetVisualDescendants().OfType<Expander>().Where(e => e.Classes.Contains("navigation")))
+                expander.IsExpanded = expander.Name == "PullRequestCategory";
+            Dispatcher.UIThread.RunJobs();
+            var tree = nav.FindControl<TreeView>("PullRequestTree")!;
+            var row = tree.GetVisualDescendants().OfType<TreeViewItem>().First(r => r.DataContext is PullRequestTreeNode { Item: not null });
+            var point = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(point, Avalonia.Input.MouseButton.Right);
+            window.MouseUp(point, Avalonia.Input.MouseButton.Right);
+            Dispatcher.UIThread.RunJobs();
+            var menu = row.ContextMenu ?? tree.ContextMenu;
+            Assert.NotNull(menu);
+            Assert.True(menu.IsOpen);
+            Assert.Empty(navigations);
+            Assert.Contains(menu.ItemsSource!.Cast<MenuItem>(), item => item.Header!.ToString()!.StartsWith("Merge #42 into"));
+            menu.Close();
+            window.MouseDown(point, Avalonia.Input.MouseButton.Right);
+            window.MouseUp(point, Avalonia.Input.MouseButton.Right);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(tree.ContextMenu!.IsOpen);
+            Assert.Empty(navigations);
+            tree.ContextMenu.Close();
+            tree.SelectedItem = null;
+            window.MouseDown(point, Avalonia.Input.MouseButton.Left);
+            window.MouseUp(point, Avalonia.Input.MouseButton.Left);
+            Assert.Equal("Pull Requests", Assert.Single(navigations));
+        }
+        finally { window.Close(); }
+    }
+
     private sealed class FakeHostingProvider : IHostingProvider
     {
+        public Func<HostingRepository, bool, string, int, CancellationToken, Task<HostingPage>>? PageLoader { get; set; }
+        public List<(HostingRepository Repository, int Page)> ListRequests { get; } = [];
+        public HostingRepository? CommentRepository { get; private set; }
+        public HostingRepository? ReviewRepository { get; private set; }
+        public string Login { get; set; } = "Contributor";
+        public IReadOnlyList<HostingItem>? Items { get; set; }
+        public Task<string> AuthenticatedUserAsync(string token, CancellationToken ct = default) => Task.FromResult(Login);
         public bool Offline { get; set; }
         public string? LastReview { get; private set; }
         public string? MergedSha { get; private set; }
@@ -3685,10 +3909,14 @@ public sealed class WorkspaceTests
             CancellationToken ct = default
         )
         {
+            ListRequests.Add((repository, page));
             if (Offline)
             {
                 throw new HttpRequestException("Offline test");
             }
+
+            if (PageLoader is not null) return PageLoader(repository, pullRequests, state, page, ct);
+            if (Items is not null) return Task.FromResult(new HostingPage(Items, false));
 
             return Task.FromResult(
                 new HostingPage(
@@ -3716,7 +3944,11 @@ public sealed class WorkspaceTests
             int number,
             string token,
             CancellationToken ct = default
-        ) => Task.FromResult<IReadOnlyList<HostingComment>>([new("Reviewer", "Looks good", DateTimeOffset.UtcNow)]);
+        )
+        {
+            CommentRepository = repository;
+            return Task.FromResult<IReadOnlyList<HostingComment>>([new("Reviewer", "Looks good", DateTimeOffset.UtcNow)]);
+        }
 
         public Task<HostingItem> CreateAsync(
             HostingRepository repository,
@@ -3761,6 +3993,7 @@ public sealed class WorkspaceTests
         )
         {
             LastReview = action;
+            ReviewRepository = repository;
             return Task.CompletedTask;
         }
 

@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:GitLlama.Desktop.Views"
              x:Class="GitLlama.Desktop.Views.NavigationView">
@@ -186,13 +186,56 @@
                 </Border>
 
                 <Border Classes="category">
-                    <Expander Classes="navigation"
-                              Header="Pull requests"
-                              IsExpanded="False">
-                        <Button Classes="workspace toolbar"
-                                Content="View pull requests…"
-                                Click="PullRequests_Click"
-                                HorizontalContentAlignment="Left" />
+                    <Expander x:Name="PullRequestCategory" Classes="navigation" IsExpanded="False"
+                              Expanded="PullRequests_Expanded">
+                        <Expander.Header>
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                <TextBlock Text="Pull requests" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding PullRequestCount}" Classes="muted" VerticalAlignment="Center" />
+                                <Button Grid.Column="2" Classes="workspace toolbar" Content="↻"
+                                    Command="{Binding RefreshPullRequestsCommand}" Padding="6,0" MinHeight="0" IsEnabled="{Binding !IsHostingBusy}"
+                                        ToolTip.Tip="Refresh pull requests" />
+                            </Grid>
+                        </Expander.Header>
+                        <Grid RowDefinitions="Auto,*,Auto" MaxHeight="360">
+                            <Grid ColumnDefinitions="*,80" ColumnSpacing="4">
+                                <TextBox x:Name="PullRequestSearchBox" Text="{Binding PullRequestSearch}" Watermark="Search pull requests…" />
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding HostingStates}" SelectedItem="{Binding HostingState}"
+                                          ToolTip.Tip="Pull request state across this repository's GitHub remotes" />
+                            </Grid>
+                            <TreeView x:Name="PullRequestTree" ItemsSource="{Binding PullRequestTree}"
+                                      Grid.Row="1"
+                                      SelectedItem="{Binding SelectedPullRequestNode, Mode=TwoWay}"
+                                      ContextRequested="PullRequestContextRequested" Margin="0,6,8,4" MinHeight="70"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <TreeView.Styles>
+                                    <Style Selector="TreeViewItem">
+                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                        <Setter Property="Padding" Value="2,2" />
+                                    </Style>
+                                </TreeView.Styles>
+                                <TreeView.ItemTemplate>
+                                    <TreeDataTemplate ItemsSource="{Binding Children}">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="5" ToolTip.Tip="{Binding Tooltip}">
+                                            <TextBlock Text="{Binding Icon}" Foreground="{Binding IconColor}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="muted" FontSize="11"
+                                                       Margin="4,0,4,0" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </TreeDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                            <StackPanel Grid.Row="2" Spacing="4">
+                            <Button Classes="workspace toolbar" Content="Cancel refresh"
+                                    Command="{Binding RefreshPullRequestsCancelCommand}" IsVisible="{Binding IsPullRequestLoading}" />
+                            <TextBlock Text="{Binding PullRequestAccountHint}" Classes="muted" FontSize="11" TextWrapping="Wrap"
+                                       IsVisible="{Binding HasPullRequestAccountHint}" />
+                            <TextBlock Text="{Binding HostingStatus}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                            <Button Classes="workspace toolbar" Content="Retry incomplete list"
+                                    Command="{Binding LoadMorePullRequestsCommand}" IsVisible="{Binding HasMorePullRequests}" />
+                            <Button Classes="workspace toolbar" Content="Pull request workspace…" Click="PullRequests_Click" />
+                            </StackPanel>
+                        </Grid>
                     </Expander>
                 </Border>
 

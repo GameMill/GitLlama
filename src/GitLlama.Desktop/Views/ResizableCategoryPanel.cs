@@ -27,7 +27,8 @@ public sealed class ResizableCategoryPanel : Grid
             child.MaxHeight = double.PositiveInfinity;
         }
 
-        viewport = content is ListBox or TreeView || content is RemoteTreeView
+        // Grid categories can pin their search/header and let the star-sized list scroll independently.
+        viewport = content is ListBox or TreeView or Grid || content is RemoteTreeView
             ? content
             : new ScrollViewer
             {

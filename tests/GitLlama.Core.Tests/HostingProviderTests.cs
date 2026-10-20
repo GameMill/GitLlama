@@ -10,6 +10,23 @@ namespace GitLlama.Core.Tests;
 
 public sealed class HostingProviderTests
 {
+    [Fact]
+    public async Task PullRequestsIncludeAssignmentsReviewRequestsAndDraftState()
+    {
+        using var handler = new Handler { Body = """
+            [{"number":42,"title":"Review me","state":"open","draft":true,"user":{"login":"author"},
+              "head":{"sha":"1234","ref":"fork-change"},"base":{"ref":"main"},
+              "assignees":[{"login":"assigned-user"}],"requested_reviewers":[{"login":"reviewer"}]}]
+            """ };
+        using var client = new HttpClient(handler);
+        using var provider = new GitHubProvider(client);
+        var item = Assert.Single((await provider.ListAsync(new("owner", "repo"), true, "open", 1, "token")).Items);
+        Assert.True(item.IsDraft);
+        Assert.False(item.IsMerged);
+        Assert.Equal(new[] { "assigned-user" }, item.Assignees);
+        Assert.Equal(new[] { "reviewer" }, item.RequestedReviewers);
+        Assert.Equal("fork-change", item.HeadBranch);
+    }
     [Theory]
     [InlineData("git@github.com:owner/client.git")]
     [InlineData("https://github.com/owner/client.git")]

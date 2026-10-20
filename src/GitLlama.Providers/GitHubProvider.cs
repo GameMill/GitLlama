@@ -348,7 +348,7 @@ public sealed partial class GitHubProvider : IHostingProvider, IDisposable
     {
         var head = item.TryGetProperty("head", out var h) ? h : default;
         var @base = item.TryGetProperty("base", out var b) ? b : default;
-        return new(
+        return new HostingItem(
             item.GetProperty("number").GetInt32(),
             Text(item, "title"),
             Text(item, "body"),
@@ -359,8 +359,19 @@ public sealed partial class GitHubProvider : IHostingProvider, IDisposable
             Text(head, "sha"),
             Text(head, "ref"),
             Text(@base, "ref")
-        );
+        )
+        {
+            Assignees = Logins(item, "assignees"),
+            RequestedReviewers = Logins(item, "requested_reviewers"),
+            IsDraft = item.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True,
+            IsMerged = item.TryGetProperty("merged_at", out var merged) && merged.ValueKind == JsonValueKind.String
+        };
     }
+
+    private static string[] Logins(JsonElement item, string field) =>
+        item.TryGetProperty(field, out var users) && users.ValueKind == JsonValueKind.Array
+            ? users.EnumerateArray().Select(user => Text(user, "login")).Where(login => login.Length > 0).ToArray()
+            : [];
 
     private static string Text(JsonElement element, string name) =>
         element.ValueKind == JsonValueKind.Object
