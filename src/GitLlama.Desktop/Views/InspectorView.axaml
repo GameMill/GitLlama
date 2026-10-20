@@ -308,7 +308,7 @@
                                                        ToolTip.Tip="{Binding Path}" />
 
 
-                                            <StackPanel Grid.Column="3"
+                                            <StackPanel Grid.Column="4"
                                                         Orientation="Horizontal"
                                                         Spacing="4">
                                             <Border Background="#2B3B50"
@@ -333,7 +333,7 @@
                                                   ToolTip.Tip="{Binding LockToolTip}" />
                                             </StackPanel>
 
-                                            <Border Grid.Column="4" Classes="file-status"
+                                            <Border Grid.Column="3" Classes="file-status"
                                                     Background="{Binding StagedStatusBackground}">
                                                 <TextBlock Text="{Binding StagedStatus}" Foreground="{Binding StagedStatusColor}" />
                                             </Border>
@@ -387,7 +387,7 @@
                                                        ToolTip.Tip="{Binding Path}" />
 
 
-                                            <StackPanel Grid.Column="3"
+                                            <StackPanel Grid.Column="4"
                                                         Orientation="Horizontal"
                                                         Spacing="4">
                                             <Border Background="#2B3B50"
@@ -412,7 +412,7 @@
                                                   ToolTip.Tip="{Binding LockToolTip}" />
                                             </StackPanel>
 
-                                            <Border Grid.Column="4" Classes="file-status"
+                                            <Border Grid.Column="3" Classes="file-status"
                                                     Background="{Binding UnstagedStatusBackground}">
                                                 <TextBlock Text="{Binding UnstagedStatus}" Foreground="{Binding UnstagedStatusColor}" />
                                             </Border>
