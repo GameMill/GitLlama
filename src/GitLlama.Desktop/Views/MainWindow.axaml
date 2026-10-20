@@ -352,10 +352,12 @@
                                                         VerticalAlignment="Bottom"
                                                         Margin="0,0,0,4" />
                                                 <Button Grid.Column="1"
-                                                        Classes="workspace toolbar"
+                                                        Classes="workspace"
+                                                        Classes.toolbar="{Binding !IsSubmodule}"
+                                                        Classes.branch-picker="{Binding IsSubmodule}"
                                                         Click="RepositoryCrumb_Click"
                                                         ToolTip.Tip="{Binding Repository.Path}"
-                                                        Padding="6,2">
+                                                        Padding="10,5">
                                                     <StackPanel Spacing="1">
                                                         <TextBlock Text="{Binding Caption}" Classes="muted" FontSize="10" />
                                                         <StackPanel Orientation="Horizontal" Spacing="8">
