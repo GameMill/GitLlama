@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.2 - 2026-10-20
+
+- Place LFS badges after the file status label consistently in staged and unstaged change lists.
+- Show ahead and behind counts as badges at the top right of Push and Pull without changing the buttons' size.
+- Give the submodule picker the same bordered appearance as the branch and push / pull pickers.
 - Consolidate profile and repository author settings under Commit identity, with the effective author and precedence shown. Make Integrations the account sign-in entry point, move helper and temporary-token controls into advanced Git connections, and keep clearing temporary credentials separate from disconnecting integration accounts.
 - Compact the commit inspector's file rows and empty change groups. Show colored Added, Modified, Deleted, and Renamed labels, including the correct status for each side of a partially staged file.
 - Keep a commit selected by the first click when returning to the app. A refresh started on activation no longer restores an older selection over that click.
