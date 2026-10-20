@@ -61,7 +61,7 @@
 
                     <ListBox ItemsSource="{Binding SettingsSections}" SelectedItem="{Binding SelectedSettingsSection}" />
 
-                    <TextBlock Text="Integration connections use secure Windows storage. Session tokens entered in Authentication stay in memory."
+                    <TextBlock Text="Accounts connect in Integrations. Commit identity sets the author shown on your commits."
                                Classes="muted"
                                TextWrapping="Wrap"
                                FontSize="11"
@@ -145,20 +145,13 @@
                                          MaxLength="60"
                                          Watermark="Work, Personal…" />
 
-                                <TextBlock Text="Commit identity"
-                                           FontWeight="SemiBold"
-                                           Margin="0,4,0,0" />
-
-                                <TextBox Text="{Binding ProfileAuthorName}" Watermark="Author name" />
-                                <TextBox Text="{Binding ProfileAuthorEmail}" Watermark="Author email" />
-
-                                <TextBlock Text="Leave both fields blank to use the repository's Git identity. A profile identity is used for commits in GitLlama without changing Git configuration."
-                                           Classes="muted"
-                                           TextWrapping="Wrap" />
+                                <Button Classes="workspace toolbar" Content="Edit commit identity…"
+                                        Command="{Binding OpenSettingsSectionCommand}" CommandParameter="Commit identity"
+                                        HorizontalAlignment="Left" />
 
                                 <WrapPanel ItemSpacing="8">
                                     <Button Classes="workspace primary"
-                                            Content="Save profile"
+                                            Content="Save profile name"
                                             Command="{Binding SaveProfileCommand}" />
 
                                     <Button Classes="workspace toolbar"
@@ -192,76 +185,67 @@
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding IsAuthenticationSettings}" Spacing="16">
-                        <TextBlock Text="HTTPS connections"
-                                   FontSize="18"
-                                   FontWeight="SemiBold" />
-
-                        <TextBlock Text="Use your existing Git accounts and browser sign-in through Git Credential Manager, or enter a token for this session."
-                                   Classes="muted"
-                                   TextWrapping="Wrap" />
+                        <TextBlock Text="Advanced Git connections" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="Most users only need Integrations for GitHub or Azure DevOps, and SSH for key-based connections. These fallback options support other HTTPS hosts or an existing system Git setup."
+                                   Classes="muted" TextWrapping="Wrap" />
+                        <Button Classes="workspace primary" Content="Manage connected accounts"
+                                Command="{Binding OpenSettingsSectionCommand}" CommandParameter="Integrations"
+                                HorizontalAlignment="Left" />
 
                         <Border Classes="card">
-                            <StackPanel Spacing="10">
-                                <CheckBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                          Content="Use the configured Git credential helper"
-                                          IsChecked="{Binding UseCredentialManager}" />
-
-                                <TextBlock Text="Requires system Git and a configured helper such as Git Credential Manager. The helper manages sign-in and credential storage; GitLlama does not save passwords to its settings."
-                                           Classes="muted"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
+                            <Expander Classes="navigation" Header="System credential helper" IsExpanded="False">
+                                <StackPanel Spacing="10" Margin="8,12,8,8">
+                                    <CheckBox IsEnabled="{Binding !IsAuthenticationBusy}"
+                                              Content="Use the configured Git credential helper"
+                                              IsChecked="{Binding UseCredentialManager}" />
+                                    <TextBlock Text="A fallback for HTTPS hosts without a connected integration or temporary token. This requires a configured system Git helper, such as Git Credential Manager. It manages its own sign-in and credential storage."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                    <TextBlock Text="Connected integration accounts are managed separately under Integrations."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Expander>
                         </Border>
 
                         <Border Classes="card">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="Session token" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding NetworkCredentialHost}" Classes="muted" />
-
-                                <TextBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                         Text="{Binding NetworkUsername}"
-                                         Watermark="Username (optional for tokens)" />
-
-                                <TextBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                         Text="{Binding NetworkSecret}"
-                                         PasswordChar="●"
-                                         Watermark="Personal access token" />
-
-                                <TextBlock Text="A session token takes priority for the displayed host. It is cleared when the repository or host changes. Most providers require a token instead of your account password."
-                                           TextWrapping="Wrap"
-                                           Classes="muted" />
-                            </StackPanel>
+                            <Expander x:Name="TemporaryTokenExpander" Classes="navigation"
+                                      Header="Temporary HTTPS token (advanced)" IsExpanded="False">
+                                <StackPanel Spacing="10" Margin="8,12,8,8">
+                                    <TextBlock Text="Only needed for an HTTPS host without an integration, or to temporarily use different credentials. Leave blank for normal integration sign-in."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding NetworkCredentialHost}" FontWeight="SemiBold" />
+                                    <TextBox IsEnabled="{Binding !IsAuthenticationBusy}" Text="{Binding NetworkUsername}"
+                                             Watermark="Username (optional for tokens)" />
+                                    <TextBox x:Name="TemporaryTokenInput" IsEnabled="{Binding !IsAuthenticationBusy}"
+                                             Text="{Binding NetworkSecret}" PasswordChar="●" Watermark="Temporary personal access token" />
+                                    <TextBlock Text="Overrides HTTPS credentials for the displayed host only. Kept in memory and cleared when the repository, host, or profile changes. It does not sign you into the provider's integration."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                    <Button Classes="workspace toolbar" Content="Clear temporary token"
+                                            Command="{Binding ClearSessionCredentialsCommand}" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Expander>
                         </Border>
 
-                        <TextBlock Text="Check repository access" FontWeight="SemiBold" />
-
-                        <TextBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                 Text="{Binding AuthenticationTestUrl}"
-                                 Watermark="https://host/owner/repository.git" />
-
-                        <WrapPanel ItemSpacing="8">
-                            <Button Classes="workspace primary"
-                                    Content="Connect / check access"
-                                    Command="{Binding TestAuthenticationCommand}"
-                                    IsEnabled="{Binding !IsAuthenticationBusy}" />
-
-                            <Button Classes="workspace"
-                                    Content="Cancel"
-                                    Command="{Binding CancelAuthenticationCommand}"
-                                    IsVisible="{Binding IsAuthenticationBusy}" />
-
-                            <Button Classes="workspace"
-                                    Content="Forget saved login"
-                                    Command="{Binding ForgetSavedLoginCommand}"
-                                    IsEnabled="{Binding !IsAuthenticationBusy}" />
-
-                            <Button Classes="workspace toolbar"
-                                    Content="Clear session credentials"
-                                    Command="{Binding ClearSessionCredentialsCommand}" />
-                        </WrapPanel>
-
-                        <TextBlock Text="{Binding AuthenticationFeedback}"
-                                   TextWrapping="Wrap"
-                                   Classes="muted" />
+                        <Border Classes="card">
+                            <Expander Classes="navigation" Header="Check repository access and troubleshoot" IsExpanded="False">
+                                <StackPanel Spacing="10" Margin="8,12,8,8">
+                                    <TextBlock Text="Checks this repository using your current integration, SSH key, temporary token, or Git helper as appropriate."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                    <TextBox IsEnabled="{Binding !IsAuthenticationBusy}" Text="{Binding AuthenticationTestUrl}"
+                                             Watermark="https://host/owner/repository.git" />
+                                    <WrapPanel ItemSpacing="8">
+                                        <Button Classes="workspace primary" Content="Check access" Command="{Binding TestAuthenticationCommand}"
+                                                IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                        <Button Classes="workspace" Content="Cancel" Command="{Binding CancelAuthenticationCommand}"
+                                                IsVisible="{Binding IsAuthenticationBusy}" />
+                                        <Button Classes="workspace toolbar" Content="Forget helper login"
+                                                Command="{Binding ForgetSavedLoginCommand}" IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                    </WrapPanel>
+                                    <TextBlock Text="Forgetting a helper login affects the system Git helper for this URL. Disconnect integration accounts in Integrations."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Expander>
+                        </Border>
+                        <TextBlock Text="{Binding AuthenticationFeedback}" TextWrapping="Wrap" Classes="muted" />
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding IsSshSettings}" Spacing="16">
@@ -692,33 +676,44 @@
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding IsIdentitySettings}" Spacing="16">
-                        <TextBlock Text="Commit identity"
-                                   FontSize="18"
-                                   FontWeight="SemiBold" />
-
-                        <TextBlock Text="Commit authorship is separate from authentication. These settings apply to the selected repository."
-                                   Classes="muted"
-                                   TextWrapping="Wrap" />
-
-                        <TextBlock Text="{Binding SelectedRepository.Name}" FontWeight="SemiBold" />
-
-                        <TextBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                 Text="{Binding LocalIdentityName}"
-                                 Watermark="Author name" />
-
-                        <TextBox IsEnabled="{Binding !IsAuthenticationBusy}"
-                                 Text="{Binding LocalIdentityEmail}"
-                                 Watermark="Author email" />
-
-                        <Button Classes="workspace primary"
-                                Content="Save repository identity"
-                                Command="{Binding SaveLocalIdentityCommand}"
-                                IsEnabled="{Binding HasRepository}"
-                                HorizontalAlignment="Left" />
-
-                        <TextBlock Text="{Binding ConfiguredIdentity}"
-                                   TextWrapping="Wrap"
-                                   Classes="muted" />
+                        <TextBlock Text="Who your commits are from" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="Your author name and email are recorded in commits. They are separate from the account you sign in with to push or pull."
+                                   Classes="muted" TextWrapping="Wrap" />
+                        <Border Classes="card">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Currently used for new commits" Classes="muted" />
+                                <TextBlock Text="{Binding EffectiveCommitIdentity}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding CommitIdentitySource}" Classes="muted" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Profile commit identity" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ActiveProfileName}" Classes="muted" />
+                                <TextBox x:Name="ProfileIdentityNameInput" Text="{Binding ProfileAuthorName}" Watermark="Author name" />
+                                <TextBox x:Name="ProfileIdentityEmailInput" Text="{Binding ProfileAuthorEmail}" Watermark="Author email" />
+                                <TextBlock Text="Used across repositories in this profile. Leave both blank to use the selected repository's Git configuration. Saving changes GitLlama's profile only."
+                                           Classes="muted" TextWrapping="Wrap" />
+                                <Button Classes="workspace primary" Content="Save commit identity"
+                                        Command="{Binding SaveCommitIdentityCommand}" HorizontalAlignment="Left" />
+                                <TextBlock Text="{Binding ProfileFeedback}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card">
+                            <Expander x:Name="RepositoryIdentityExpander" Classes="navigation"
+                                      Header="Advanced: repository Git configuration" IsExpanded="False">
+                                <StackPanel Spacing="10" Margin="8,12,8,8">
+                                    <TextBlock Text="Used when this profile's author name and email are blank. Saving writes user.name and user.email to this repository's Git configuration; it does not change the profile identity above."
+                                               Classes="muted" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding SelectedRepository.Name}" FontWeight="SemiBold" />
+                                    <TextBox IsEnabled="{Binding HasRepository}" Text="{Binding LocalIdentityName}" Watermark="Git author name" />
+                                    <TextBox IsEnabled="{Binding HasRepository}" Text="{Binding LocalIdentityEmail}" Watermark="Git author email" />
+                                    <Button Classes="workspace" Content="Save repository Git identity" Command="{Binding SaveLocalIdentityCommand}"
+                                            IsEnabled="{Binding HasRepository}" HorizontalAlignment="Left" />
+                                    <TextBlock Text="{Binding ConfiguredIdentity}" TextWrapping="Wrap" Classes="muted" />
+                                </StackPanel>
+                            </Expander>
+                        </Border>
                     </StackPanel>
 
                     <StackPanel IsVisible="{Binding IsDiagnosticsSettings}" Spacing="16">

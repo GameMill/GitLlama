@@ -29,12 +29,19 @@ public partial class MainWindowViewModel
     private bool _switchingProfile;
     public string ActiveProfileName => ActiveProfile?.Name ?? "Default";
     public string ProfileInitial => ActiveProfileName[..1].ToUpperInvariant();
+    public string EffectiveCommitIdentity => string.IsNullOrWhiteSpace(AuthorName) || string.IsNullOrWhiteSpace(AuthorEmail)
+        ? "No commit identity configured" : $"{AuthorName} <{AuthorEmail}>";
+    public string CommitIdentitySource => !string.IsNullOrWhiteSpace(ActiveProfile?.AuthorName)
+        && !string.IsNullOrWhiteSpace(ActiveProfile?.AuthorEmail)
+        ? $"Using the {ActiveProfileName} profile identity."
+        : "Using the selected repository's Git configuration.";
     public bool IsProfilesSettings => SelectedSettingsSection == "Profiles";
 
     partial void OnActiveProfileChanged(SettingsProfile? value)
     {
         OnPropertyChanged(nameof(ActiveProfileName));
         OnPropertyChanged(nameof(ProfileInitial));
+        OnPropertyChanged(nameof(CommitIdentitySource));
     }
 
     private void InitializeProfiles(GitLlamaSettings settings)
@@ -186,7 +193,7 @@ public partial class MainWindowViewModel
         var profile = new SettingsProfile(Guid.NewGuid().ToString("N"), name);
         Profiles.Add(profile);
         ApplyProfile(profile);
-        ProfileFeedback = "Give your new profile a name and an optional commit identity.";
+        ProfileFeedback = "Give your new profile a name. Set its author details in Commit identity.";
         await RestoreProfileIntegrationsAsync();
         await PersistAsync();
     }
@@ -200,8 +207,6 @@ public partial class MainWindowViewModel
         }
 
         var name = ProfileName.Trim();
-        var author = ProfileAuthorName.Trim();
-        var email = ProfileAuthorEmail.Trim();
         if (name.Length is < 1 or > 60)
         {
             ProfileFeedback = "Enter a profile name between 1 and 60 characters.";
@@ -214,17 +219,30 @@ public partial class MainWindowViewModel
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(author) != string.IsNullOrWhiteSpace(email))
-        {
-            ProfileFeedback = "Enter both author name and email, or leave both blank to use repository identity.";
-            return;
-        }
-
-        var updated = profile with { Name = name, AuthorName = author, AuthorEmail = email };
+        var updated = profile with { Name = name };
         Profiles[Profiles.IndexOf(profile)] = updated;
         ActiveProfile = ProfileToSwitch = updated;
         ApplyProfileIdentity();
         ProfileFeedback = "Profile saved.";
+        await PersistAsync();
+    }
+
+    [RelayCommand]
+    private async Task SaveCommitIdentityAsync()
+    {
+        if (!CanChangeProfile() || ActiveProfile is not { } profile) return;
+        var author = ProfileAuthorName.Trim();
+        var email = ProfileAuthorEmail.Trim();
+        if (string.IsNullOrWhiteSpace(author) != string.IsNullOrWhiteSpace(email))
+        {
+            ProfileFeedback = "Enter both name and email, or leave both blank to use Git configuration.";
+            return;
+        }
+        var updated = profile with { AuthorName = author, AuthorEmail = email };
+        Profiles[Profiles.IndexOf(profile)] = updated;
+        ActiveProfile = ProfileToSwitch = updated;
+        ApplyProfileIdentity();
+        ProfileFeedback = "Commit identity saved for " + ActiveProfileName + ".";
         await PersistAsync();
     }
 

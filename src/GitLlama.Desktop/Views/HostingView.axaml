@@ -21,17 +21,17 @@
                     IsEnabled="{Binding !IsHostingBusy}" />
         </Grid>
 
-        <Expander Grid.Row="1" Header="GitHub access">
-            <StackPanel Spacing="6" Margin="8">
-                <TextBox PasswordChar="●"
-                         Text="{Binding GithubToken}"
-                         Watermark="GitHub token (this session only)" />
-
-                <TextBlock Text="Public repositories can be read without a token. Private repositories and write actions need the relevant token permissions. Tokens are not saved."
-                           TextWrapping="Wrap"
-                           Classes="muted" />
-            </StackPanel>
-        </Expander>
+        <Border Grid.Row="1" Classes="card">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Classes="workspace toolbar" Content="Manage integrations"
+                        Command="{Binding OpenSettingsSectionCommand}" CommandParameter="Integrations" />
+                <StackPanel Spacing="3">
+                    <TextBlock Text="{Binding GithubAccountStatus}" />
+                    <TextBlock Text="Connect GitHub in Integrations for private repositories and reviews."
+                               Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
 
         <Grid Grid.Row="2" ColumnDefinitions="*,4,*">
             <Grid RowDefinitions="*,Auto">

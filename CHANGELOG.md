@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Consolidate profile and repository author settings under Commit identity, with the effective author and precedence shown. Make Integrations the account sign-in entry point, move helper and temporary-token controls into advanced Git connections, and keep clearing temporary credentials separate from disconnecting integration accounts.
 - Compact the commit inspector's file rows and empty change groups. Show colored Added, Modified, Deleted, and Renamed labels, including the correct status for each side of a partially staged file.
 - Keep a commit selected by the first click when returning to the app. A refresh started on activation no longer restores an older selection over that click.
 - Keep unchanged history rows and their controls during background refreshes so hovering a commit does not flicker or jump to another row. Update changed graph connections and references without clearing the list.

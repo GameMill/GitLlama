@@ -2332,7 +2332,7 @@ public sealed class WorkspaceTests
             Assert.True(vm.IsFileReview);
             vm.ClearSessionCredentialsCommand.Execute(null);
             Assert.Empty(vm.NetworkSecret);
-            Assert.Empty(vm.GithubToken);
+            Assert.Equal("account-test-secret", vm.GithubToken);
         }
         finally
         {
@@ -2494,6 +2494,60 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task SettingsSeparateProfileNamesCommitIdentityAndAdvancedCredentials()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        Assert.Equal("Integrations", vm.SelectedSettingsSection);
+        Assert.Contains("Commit identity", vm.SettingsSections);
+        Assert.Contains("Git connections", vm.SettingsSections);
+        Assert.DoesNotContain("Authentication", vm.SettingsSections);
+        vm.ProfileName = "Unsaved rename";
+        vm.ProfileAuthorName = "Profile Author";
+        vm.ProfileAuthorEmail = "";
+        await vm.SaveCommitIdentityCommand.ExecuteAsync(null);
+        Assert.Equal("Robert Fryer", vm.AuthorName);
+        vm.ProfileAuthorEmail = "profile@example.invalid";
+        await vm.SaveCommitIdentityCommand.ExecuteAsync(null);
+        Assert.Equal("Default", vm.ActiveProfileName);
+        Assert.Equal("Profile Author <profile@example.invalid>", vm.EffectiveCommitIdentity);
+        Assert.Contains("profile identity", vm.CommitIdentitySource);
+        vm.ProfileName = "Personal";
+        vm.ProfileAuthorName = "Unsaved author draft";
+        await vm.SaveProfileCommand.ExecuteAsync(null);
+        Assert.Equal("Personal", vm.ActiveProfileName);
+        Assert.Equal("Profile Author", vm.AuthorName);
+        using (var repo = new Repository(fixture.RepositoryPath))
+            Assert.Equal("Robert Fryer", repo.Config.Get<string>("user.name").Value);
+        vm.ProfileAuthorName = vm.ProfileAuthorEmail = "";
+        await vm.SaveCommitIdentityCommand.ExecuteAsync(null);
+        Assert.Equal("Robert Fryer", vm.AuthorName);
+        Assert.Contains("Git configuration", vm.CommitIdentitySource);
+
+        var view = new SettingsView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1000, Height = 800 };
+        try
+        {
+            window.Show();
+            vm.OpenSettingsSectionCommand.Execute("Profiles");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(view.FindControl<TextBox>("ProfileIdentityNameInput")!.IsEffectivelyVisible);
+            vm.OpenSettingsSectionCommand.Execute("Commit identity");
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(view.FindControl<TextBox>("ProfileIdentityNameInput")!.IsEffectivelyVisible);
+            Assert.False(view.FindControl<Expander>("RepositoryIdentityExpander")!.IsExpanded);
+            SavePreview(window, "consolidated-commit-identity.png");
+            vm.OpenSettingsSectionCommand.Execute("Git connections");
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(view.FindControl<Expander>("TemporaryTokenExpander")!.IsExpanded);
+            Assert.Equal('●', view.FindControl<TextBox>("TemporaryTokenInput")!.PasswordChar);
+            SavePreview(window, "advanced-git-connections.png");
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task ProfilesSwitchIdentityAndKeysPersistAndClearSessionSecrets()
     {
         using var fixture = new WorkspaceFixture();
@@ -2511,6 +2565,7 @@ public sealed class WorkspaceTests
         vm.ProfileAuthorName = "Work Author";
         vm.ProfileAuthorEmail = "work@example.com";
         await vm.SaveProfileCommand.ExecuteAsync(null);
+        await vm.SaveCommitIdentityCommand.ExecuteAsync(null);
         vm.SshPrivateKeyPath = "work-key";
         vm.UseCredentialManager = false;
         await vm.ToggleFavoriteCommand.ExecuteAsync(null);
@@ -2747,7 +2802,13 @@ public sealed class WorkspaceTests
         vm.NetworkCredentialHost = "github.com";
         vm.NetworkSecret = "separate-host-token";
         Assert.Equal("separate-host-token", vm.NetworkOptions(0).Secret);
-        vm.NetworkSecret = "";
+        vm.NetworkUsername = "temporary-user";
+        vm.ClearSessionCredentialsCommand.Execute(null);
+        Assert.Empty(vm.NetworkSecret);
+        Assert.Empty(vm.NetworkUsername);
+        Assert.True(vm.IsGithubConnected);
+        Assert.Equal("oauth-session-secret", vm.GithubToken);
+        Assert.Equal("oauth-session-secret", vm.NetworkOptions(0).Secret);
         await vm.ToggleFavoriteCommand.ExecuteAsync(null);
         var json = File.ReadAllText(Path.Combine(fixture.SettingsPath, "settings.json"));
         Assert.DoesNotContain("oauth-session-secret", json);

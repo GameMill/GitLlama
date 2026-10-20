@@ -25,7 +25,7 @@ public partial class MainWindowViewModel
     private bool isSettingsOpen;
 
     [ObservableProperty]
-    private string selectedSettingsSection = "Authentication";
+    private string selectedSettingsSection = "Integrations";
 
     [ObservableProperty]
     private bool useCredentialManager = true;
@@ -80,13 +80,21 @@ public partial class MainWindowViewModel
     }
 
     public IReadOnlyList<string> SettingsSections { get; } =
-    ["General", "Profiles", "Authentication", "SSH", "Integrations", "Git identity", "Diagnostics"];
+    ["General", "Profiles", "Commit identity", "Integrations", "SSH", "Git connections", "Diagnostics"];
     public bool IsGeneralSettings => SelectedSettingsSection == "General";
-    public bool IsAuthenticationSettings => SelectedSettingsSection == "Authentication";
+    public bool IsAuthenticationSettings => SelectedSettingsSection is "Git connections" or "Authentication";
     public bool IsSshSettings => SelectedSettingsSection == "SSH";
     public bool IsIntegrationsSettings => SelectedSettingsSection == "Integrations";
-    public bool IsIdentitySettings => SelectedSettingsSection == "Git identity";
+    public bool IsIdentitySettings => SelectedSettingsSection is "Commit identity" or "Git identity";
     public bool IsDiagnosticsSettings => SelectedSettingsSection == "Diagnostics";
+
+    [RelayCommand]
+    private void OpenSettingsSection(string? section)
+    {
+        if (section is null || !SettingsSections.Contains(section)) return;
+        SelectedSettingsSection = section;
+        IsSettingsOpen = true;
+    }
 
     partial void OnSelectedSettingsSectionChanged(string value)
     {
@@ -225,18 +233,8 @@ public partial class MainWindowViewModel
             );
             NetworkSecret = "";
             NetworkUsername = "";
-            if (
-                Uri.TryCreate(AuthenticationTestUrl.Trim(), UriKind.Absolute, out var forgotten)
-                && forgotten.Authority.Equals("github.com", StringComparison.OrdinalIgnoreCase)
-                && ActiveProfile is { } profile
-            )
-            {
-                ClearGithubConnectionMemory();
-                await ForgetStoredGithubAsync(profile.Id);
-            }
-
             AuthenticationFeedback =
-                "Saved credentials for this URL were removed through your Git helper. Connect again to sign in.";
+                "Credentials for this URL were removed from your Git helper. Integration accounts stay connected.";
         }
         catch (OperationCanceledException)
         {
@@ -255,7 +253,7 @@ public partial class MainWindowViewModel
     }
 
     [RelayCommand]
-    private async Task ClearSessionCredentialsAsync()
+    private void ClearSessionCredentials()
     {
         if (IsAuthenticationBusy)
         {
@@ -263,9 +261,9 @@ public partial class MainWindowViewModel
         }
 
         NetworkSecret = "";
-        await DisconnectGithubAsync();
+        NetworkUsername = "";
         AuthenticationFeedback =
-            "Session credentials cleared. Credentials managed by Git remain in its configured helper.";
+            "Temporary token cleared. Integration accounts and credentials in your Git helper stay connected.";
     }
 
     [RelayCommand]

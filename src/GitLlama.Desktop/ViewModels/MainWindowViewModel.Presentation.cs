@@ -192,12 +192,14 @@ public partial class MainWindowViewModel
 
     partial void OnAuthorNameChanged(string value)
     {
+        OnPropertyChanged(nameof(EffectiveCommitIdentity));
         OnPropertyChanged(nameof(CanCommit));
         CommitCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnAuthorEmailChanged(string value)
     {
+        OnPropertyChanged(nameof(EffectiveCommitIdentity));
         OnPropertyChanged(nameof(CanCommit));
         CommitCommand.NotifyCanExecuteChanged();
     }
