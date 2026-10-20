@@ -7,6 +7,33 @@ namespace GitLlama.Core.Tests;
 public sealed class GitWorkingTreeServiceTests
 {
     [Fact]
+    public async Task BlankAmendMessageDoesNotBypassPublishedCommitProtection()
+    {
+        var path = NewRepository();
+        try
+        {
+            var service = new GitWorkingTreeService();
+            File.WriteAllText(Path.Combine(path, "one.txt"), "original");
+            await service.StageAsync(path, "one.txt");
+            var original = await service.CommitAsync(path, "Original summary\n\nOriginal description", "Test", "test@example.com");
+            using (var repo = new Repository(path))
+                repo.Refs.Add("refs/remotes/origin/main", new ObjectId(original));
+            File.WriteAllText(Path.Combine(path, "one.txt"), "staged edit");
+            await service.StageAsync(path, "one.txt");
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                service.CommitAsync(path, "", "Test", "test@example.com", amend: true));
+            Assert.Contains("fetched remote branch", error.Message);
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                service.CommitAsync(path, "", "Test", "test@example.com"));
+            using var unchanged = new Repository(path);
+            Assert.Equal(original, unchanged.Head.Tip.Sha);
+            Assert.Equal("original", ((Blob)unchanged.Head.Tip["one.txt"].Target).GetContentText());
+            Assert.True(unchanged.RetrieveStatus("one.txt").HasFlag(FileStatus.ModifiedInIndex));
+        }
+        finally { Cleanup(path); }
+    }
+
+    [Fact]
     public async Task StageCommitAndUnstageRoundTrip()
     {
         var path = NewRepository();

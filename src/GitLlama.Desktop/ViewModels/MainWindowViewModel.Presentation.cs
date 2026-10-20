@@ -105,7 +105,7 @@ public partial class MainWindowViewModel
     public bool CanCommit =>
         HasRepository
         && StagedFileCount > 0
-        && !string.IsNullOrWhiteSpace(CommitSummaryText)
+        && (AmendStagedCommit || !string.IsNullOrWhiteSpace(CommitSummaryText))
         && !string.IsNullOrWhiteSpace(AuthorName)
         && !string.IsNullOrWhiteSpace(AuthorEmail);
     public string CommitSummaryText

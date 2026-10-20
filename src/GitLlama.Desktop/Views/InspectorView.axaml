@@ -469,6 +469,8 @@
                                      Height="76" />
 
                             <CheckBox Content="Amend latest unpublished commit" IsChecked="{Binding AmendStagedCommit}" />
+                            <TextBlock Text="Leave the message blank to keep the current commit message."
+                                       Classes="muted" FontSize="11" TextWrapping="Wrap" IsVisible="{Binding AmendStagedCommit}" />
                         </StackPanel>
 
                         <StackPanel Spacing="9" IsVisible="{Binding IsStashMode}">

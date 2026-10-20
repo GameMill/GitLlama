@@ -52,7 +52,7 @@ public sealed class GitWorkingTreeService
             () =>
             {
                 ct.ThrowIfCancellationRequested();
-                if (string.IsNullOrWhiteSpace(message))
+                if (!amend && string.IsNullOrWhiteSpace(message))
                 {
                     throw new ArgumentException("A commit message is required.", nameof(message));
                 }
@@ -63,6 +63,7 @@ public sealed class GitWorkingTreeService
                 }
 
                 using var repo = new Repository(repositoryPath);
+                var commitMessage = message;
                 if (repo.Info.IsBare)
                 {
                     throw new InvalidOperationException("Cannot commit from a bare repository.");
@@ -86,6 +87,7 @@ public sealed class GitWorkingTreeService
                     {
                         throw new InvalidOperationException("Amend requires a checked-out branch with a commit.");
                     }
+                    if (string.IsNullOrWhiteSpace(commitMessage)) commitMessage = tip.Message;
 
                     if (
                         repo
@@ -105,7 +107,7 @@ public sealed class GitWorkingTreeService
                 ct.ThrowIfCancellationRequested();
                 var signature = new Signature(authorName.Trim(), authorEmail.Trim(), DateTimeOffset.Now);
                 return repo.Commit(
-                    message.Trim(),
+                    commitMessage.Trim(),
                     signature,
                     signature,
                     new CommitOptions { AmendPreviousCommit = amend }

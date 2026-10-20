@@ -314,7 +314,21 @@ public partial class MainWindowViewModel
         NetworkCredentialHost = host;
     }
 
-    partial void OnAmendStagedCommitChanged(bool value) => OnPropertyChanged(nameof(CommitButtonText));
+    partial void OnAmendStagedCommitChanged(bool value)
+    {
+        if (value && string.IsNullOrWhiteSpace(CommitMessage) && SelectedRepository is { } repository)
+        {
+            try
+            {
+                using var repo = new LibGit2Sharp.Repository(repository.Path);
+                CommitMessage = repo.Head.Tip?.Message ?? "";
+            }
+            catch (Exception error) { Status = PresentError(error); }
+        }
+        OnPropertyChanged(nameof(CommitButtonText));
+        OnPropertyChanged(nameof(CanCommit));
+        CommitCommand.NotifyCanExecuteChanged();
+    }
 
     [RelayCommand]
     private void CancelNetwork()

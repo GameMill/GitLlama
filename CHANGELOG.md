@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Enable amending staged changes without retyping a commit message. Load the latest message when selecting Amend, keep any message already entered, and reuse the current message when left blank.
 - Fix a crash when right-clicking a pull request by opening its context menu on the control that owns it. Keep right-click in the current workspace until an action is selected.
 - Open the pull request workspace with a combined list loaded automatically from all current GitHub remotes. Remove the individual repository bar, identify each PR's source, and preserve the selected PR's details when the Git remote selection changes.
 - Load every page of pull requests from the open repository's configured GitHub remotes, deduplicating aliases and hiding repositories without matching PRs. Keep PR comments, reviews, and merges scoped to their source repository, and clear previous results when switching repositories.

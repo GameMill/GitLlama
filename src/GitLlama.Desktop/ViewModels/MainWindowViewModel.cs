@@ -4051,7 +4051,7 @@ public partial class MainWindowViewModel : ObservableObject
             await RefreshAsync();
             if (SelectedRepository?.Path == repo.Path)
             {
-                Status = $"Created commit {sha[..7]}";
+                Status = $"{(amend ? "Amended" : "Created")} commit {sha[..7]}";
             }
         }
         catch (Exception e)

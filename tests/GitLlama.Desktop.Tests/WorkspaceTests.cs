@@ -1253,6 +1253,41 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task AmendLoadsTheExistingMessageAndCanReuseItWhenBlank()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        string oldMessage, oldSha;
+        int oldCount;
+        using (var repo = new Repository(fixture.RepositoryPath))
+        {
+            oldMessage = repo.Head.Tip.Message;
+            oldSha = repo.Head.Tip.Sha;
+            oldCount = repo.Commits.Count();
+        }
+        await vm.StageAllCommand.ExecuteAsync(null);
+        Assert.True(vm.StagedFileCount > 0);
+        Assert.False(vm.CommitCommand.CanExecute(null));
+        vm.AmendStagedCommit = true;
+        Assert.Equal(oldMessage, vm.CommitMessage);
+        Assert.True(vm.CommitCommand.CanExecute(null));
+        vm.CommitMessage = "";
+        Assert.True(vm.CommitCommand.CanExecute(null));
+        await vm.CommitCommand.ExecuteAsync(null);
+        using (var repo = new Repository(fixture.RepositoryPath))
+        {
+            Assert.NotEqual(oldSha, repo.Head.Tip.Sha);
+            Assert.Equal(oldCount, repo.Commits.Count());
+            Assert.Equal(oldMessage.Trim(), repo.Head.Tip.Message.Trim());
+            Assert.Empty(repo.RetrieveStatus());
+        }
+        Assert.StartsWith("Amended commit", vm.Status);
+        Assert.False(vm.AmendStagedCommit);
+        Assert.Equal("", vm.CommitMessage);
+    }
+
+    [AvaloniaFact]
     public async Task SelectedLineCommandAndAutomaticRefreshReachRealGitState()
     {
         using var fixture = new WorkspaceFixture();
