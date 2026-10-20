@@ -21,6 +21,12 @@ public sealed record HistoryRow(GitCommitNode Commit, int Lane, double GraphWidt
     public AvatarImage AuthorAvatar => AvatarCache.ForAuthor(Commit.Author, Commit.AuthorEmail, Commit.Sha);
     public string Date => Commit.Timestamp.LocalDateTime.ToString("MMM d, HH:mm");
     public string FullDate => Commit.Timestamp.ToString("yyyy-MM-dd HH:mm:ss zzz");
+    internal bool HasSamePresentation(HistoryRow other) =>
+        Sha == other.Sha && Subject == other.Subject && Author == other.Author
+        && Commit.AuthorEmail == other.Commit.AuthorEmail && Commit.Timestamp == other.Commit.Timestamp
+        && Commit.Parents.SequenceEqual(other.Commit.Parents) && Labels.SequenceEqual(other.Labels)
+        && Lane == other.Lane && GraphWidth == other.GraphWidth && CurrentLocalBranch == other.CurrentLocalBranch
+        && Segments.SequenceEqual(other.Segments);
     public IReadOnlyList<string> Labels => Commit.Labels;
     public string? CurrentLocalBranch { get; init; }
     public bool IsCurrentBranchTip =>

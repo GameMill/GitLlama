@@ -1321,6 +1321,124 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task BackgroundRefreshKeepsHoveredHistoryRowsAndScrollStable()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var selected = vm.HistoryRows[^2];
+        vm.SelectedHistoryRow = selected;
+        var view = new HistoryView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1000, Height = 330 };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var list = view.FindControl<ListBox>("HistoryList")!;
+            list.ScrollIntoView(selected);
+            Dispatcher.UIThread.RunJobs();
+            var row = list.ContainerFromItem(selected)!;
+            Assert.NotNull(row);
+            var point = row.TranslatePoint(new Point(100, row.Bounds.Height / 2), window)!.Value;
+            window.MouseMove(point);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(row.IsPointerOver);
+            var scroll = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+            var offset = scroll.Offset;
+            Assert.True(offset.Y > 0);
+            var notifications = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+            vm.HistoryRows.CollectionChanged += (_, e) => notifications.Add(e.Action);
+            for (var i = 0; i < 3; i++)
+            {
+                await vm.RefreshCommand.ExecuteAsync(null);
+                Dispatcher.UIThread.RunJobs();
+                Assert.Same(selected, vm.SelectedHistoryRow);
+                Assert.Same(row, list.ContainerFromItem(selected));
+                Assert.True(row.IsPointerOver);
+                Assert.Equal(offset, scroll.Offset);
+            }
+            Assert.Empty(notifications);
+            using (var repo = new Repository(fixture.RepositoryPath))
+                repo.Tags.Add("hover-test", selected.Sha);
+            await vm.RefreshCommand.ExecuteAsync(null);
+            Assert.Contains("tag:hover-test", vm.HistoryRows.Single(item => item.Sha == selected.Sha).Labels);
+            using (var repo = new Repository(fixture.RepositoryPath))
+            {
+                File.WriteAllText(Path.Combine(fixture.RepositoryPath, "external.txt"), "new commit");
+                Commands.Stage(repo, "external.txt");
+                var author = new Signature("Test", "test@example.invalid", DateTimeOffset.UtcNow);
+                repo.Commit("External update", author, author);
+            }
+            await vm.RefreshCommand.ExecuteAsync(null);
+            Assert.Contains(vm.HistoryRows, item => item.Subject == "External update");
+            Assert.Equal(selected.Sha, vm.SelectedHistoryRow!.Sha);
+            Assert.DoesNotContain(System.Collections.Specialized.NotifyCollectionChangedAction.Reset, notifications);
+            vm.HistorySearch = selected.Subject;
+            Assert.All(vm.HistoryRows, item => Assert.Empty(item.Segments));
+            SavePreview(window, "stable-history-hover.png");
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task HistoryClickDuringActivationRefreshKeepsTheClickedCommit()
+    {
+        var reader = new PausableOverviewReader();
+        using var fixture = new WorkspaceFixture(reader);
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        vm.SelectedHistoryRow = vm.HistoryRows[0];
+        var target = vm.HistoryRows[3];
+        var view = new HistoryView { DataContext = vm };
+        var window = new Window { Content = view, Width = 1000, Height = 600 };
+        var other = new Window { Content = new TextBox(), Width = 200, Height = 100 };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var list = view.FindControl<ListBox>("HistoryList")!;
+            var row = list.ContainerFromItem(target)!;
+            var point = row.TranslatePoint(new Point(100, row.Bounds.Height / 2), window)!.Value;
+            other.Show();
+            ((TextBox)other.Content!).Focus();
+            reader.Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var refresh = vm.RefreshCommand.ExecuteAsync(null);
+            await WaitUntilAsync(() => reader.Paused);
+            window.Activate();
+            window.MouseDown(point, Avalonia.Input.MouseButton.Left);
+            window.MouseUp(point, Avalonia.Input.MouseButton.Left);
+            Assert.Equal(target.Sha, vm.SelectedHistoryRow!.Sha);
+            reader.Release.SetResult();
+            await refresh;
+            Assert.Equal(target.Sha, vm.SelectedHistoryRow!.Sha);
+            Assert.Equal(target.Subject, vm.HistorySubject);
+            await WaitUntilAsync(() => vm.HistoryCommitDetails.Contains(target.Sha, StringComparison.Ordinal));
+            Assert.Same(vm.SelectedHistoryRow, list.SelectedItem);
+        }
+        finally
+        {
+            reader.Release?.TrySetResult();
+            other.Close();
+            window.Close();
+        }
+    }
+
+    private sealed class PausableOverviewReader : IRepositoryOverviewReader
+    {
+        public TaskCompletionSource? Release { get; set; }
+        public bool Paused { get; private set; }
+        public async Task<RepositoryOverview> ReadOverviewAsync(string path, CancellationToken cancellationToken = default)
+        {
+            if (Release is { } gate)
+            {
+                Paused = true;
+                await gate.Task.WaitAsync(cancellationToken);
+            }
+            return await new LibGitOverviewReader().ReadOverviewAsync(path, cancellationToken);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task RefreshUpdatesBranchAndHistoryFileSelectionLoadsThePatch()
     {
         using var fixture = new WorkspaceFixture();
@@ -3577,16 +3695,14 @@ public sealed class WorkspaceTests
     private sealed class WorkspaceFixture : IDisposable
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), "GitLlama-UI-" + Guid.NewGuid().ToString("N"));
-        private readonly RepositorySessionManager _sessions = new(
-            new LibGitRepositoryReader(),
-            new LibGitOverviewReader()
-        );
+        private readonly RepositorySessionManager _sessions;
         private readonly List<MainWindowViewModel> _viewModels = [];
         public string RepositoryPath => Path.Combine(_root, "StoneForge");
         public string SettingsPath => Path.Combine(_root, "settings");
 
-        public WorkspaceFixture()
+        public WorkspaceFixture(IRepositoryOverviewReader? overview = null)
         {
+            _sessions = new(new LibGitRepositoryReader(), overview ?? new LibGitOverviewReader());
             Directory.CreateDirectory(RepositoryPath);
             Repository.Init(RepositoryPath);
             using var repo = new Repository(RepositoryPath);

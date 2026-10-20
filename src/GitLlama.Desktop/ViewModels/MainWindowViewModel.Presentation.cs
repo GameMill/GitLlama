@@ -249,9 +249,8 @@ public partial class MainWindowViewModel
     private void FilterPresentationHistory()
     {
         var previous = SelectedHistoryRow?.Sha;
-        HistoryRows.Clear();
-        foreach (
-            var row in _allHistoryRows.Where(r =>
+        var existing = HistoryRows.ToDictionary(row => row.Sha, StringComparer.Ordinal);
+        var desired = _allHistoryRows.Where(r =>
                 (
                     string.IsNullOrWhiteSpace(HistorySearch)
                     || $"{r.Sha} {r.Subject} {r.Author} {string.Join(' ', r.Labels)}".Contains(
@@ -265,12 +264,14 @@ public partial class MainWindowViewModel
                 )
                 && (HistorySince is null || r.Commit.Timestamp.Date >= HistorySince.Value.Date)
                 && (HistoryUntil is null || r.Commit.Timestamp.Date <= HistoryUntil.Value.Date)
-            )
-        )
+            ).Select(row =>
         {
             // Filtering removes intermediary commits; suppress edges to avoid inventing ancestry.
-            HistoryRows.Add(HasHistoryFilter ? row with { Segments = [] } : row);
-        }
+            var visible = HasHistoryFilter ? row with { Segments = [] } : row;
+            return existing.TryGetValue(row.Sha, out var retained) && retained.HasSamePresentation(visible)
+                ? retained : visible;
+        }).ToArray();
+        CollectionUpdates.Sync(HistoryRows, desired, row => row.Sha);
 
         SelectedHistoryRow = HistoryRows.FirstOrDefault(r => r.Sha == previous);
         if (HistoryRows.Count == 0 && HasHistoryFilter)

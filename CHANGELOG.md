@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep a commit selected by the first click when returning to the app. A refresh started on activation no longer restores an older selection over that click.
+- Keep unchanged history rows and their controls during background refreshes so hovering a commit does not flicker or jump to another row. Update changed graph connections and references without clearing the list.
 - Enable amending staged changes without retyping a commit message. Load the latest message when selecting Amend, keep any message already entered, and reuse the current message when left blank.
 - Fix a crash when right-clicking a pull request by opening its context menu on the control that owns it. Keep right-click in the current workspace until an action is selected.
 - Open the pull request workspace with a combined list loaded automatically from all current GitHub remotes. Remove the individual repository bar, identify each PR's source, and preserve the selected PR's details when the Git remote selection changes.

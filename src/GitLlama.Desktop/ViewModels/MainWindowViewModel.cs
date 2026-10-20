@@ -1560,9 +1560,18 @@ public partial class MainWindowViewModel : ObservableObject
                 : stagedCount == 1 ? "1 staged file"
                 : $"{stagedCount} staged files";
             CollectionUpdates.Sync(BranchLines, overview.Branches, branch => branch);
+            // Activation refresh can finish after a user has clicked a different commit.
             SelectedHistoryRow = _inspectedStashSha is not null
                 ? null
-                : HistoryRows.FirstOrDefault(r => r.Sha == previousHistorySha) ?? HistoryRows.FirstOrDefault();
+                : HistoryRows.FirstOrDefault(r => r.Sha == SelectedHistoryRow?.Sha)
+                    ?? HistoryRows.FirstOrDefault(r => r.Sha == previousHistorySha) ?? HistoryRows.FirstOrDefault();
+            if (SelectedHistoryRow is { } clicked && clicked.Sha != previousHistorySha
+                && _activeHistoryCommit?.Sha != clicked.Sha)
+            {
+                await LoadHistoryCommitAsync(clicked.Sha);
+                if (version != Interlocked.Read(ref _repositorySelectionVersion)
+                    || refreshVersion != Interlocked.Read(ref _refreshRevision)) return;
+            }
             SelectedWorkingFile = WorkingFiles.FirstOrDefault(file => file.Path == previousWorkingPath);
             if (SelectedWorkingFile is { } selectedWorking)
             {
