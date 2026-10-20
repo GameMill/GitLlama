@@ -327,6 +327,8 @@ public partial class MainWindowViewModel
         PushSelectedTagCommand.Cancel();
         DeleteSelectedRemoteTagCommand.Cancel();
         UpdateSubmoduleCommand.Cancel();
+        OpenSubmoduleCommand.Cancel();
+        SwitchSubmoduleCommand.Cancel();
         AddSubmoduleCommand.Cancel();
         DownloadLfsFilesCommand.Cancel();
         ChangeRemoteBranchCommand.Cancel();

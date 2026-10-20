@@ -14,6 +14,7 @@ public sealed record RepositoryCrumb(RepositoryInfo Repository, bool IsSubmodule
     public bool CanGoTo => !IsCurrent;
 }
 
+public sealed record SubmoduleNavigation(RepositoryInfo Parent, GitSubmoduleInfo Module);
 public sealed record SubmoduleAddRequest(string Url, string Path, string? Branch);
 
 public partial class MainWindowViewModel
@@ -42,31 +43,59 @@ public partial class MainWindowViewModel
     }
 
     /// <summary>Opens a submodule in the current tab, initializing it first when it hasn't been cloned.</summary>
-    [RelayCommand]
-    private async Task OpenSubmoduleAsync(GitSubmoduleInfo? module)
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task OpenSubmoduleAsync(GitSubmoduleInfo? module, CancellationToken ct)
     {
         if (module is null || SelectedRepository is not { } parent)
         {
             return;
         }
 
-        if (!module.IsCheckedOut)
-        {
-            SelectedSubmodule = module;
-            Status = $"Initializing submodule {module.DisplayName}…";
-            await UpdateSubmoduleCommand.ExecuteAsync(null);
-            var refreshed = await new GitSubmoduleService().ListAsync(parent.Path);
-            if (
-                SelectedRepository != parent
-                || refreshed.FirstOrDefault(m => m.Name == module.Name) is not { IsCheckedOut: true }
-            )
-            {
-                return;
-            }
-        }
+        await OpenSubmoduleFromAsync(parent, module, ct);
+    }
 
-        var path = Path.GetFullPath(Path.Combine(parent.Path, module.Path));
-        SelectedRepository = new RepositoryInfo(path, module.DisplayName) { Parent = parent };
+    [RelayCommand(IncludeCancelCommand = true)]
+    private async Task SwitchSubmoduleAsync(SubmoduleNavigation? target, CancellationToken ct)
+    {
+        if (target is null || !RepositoryBreadcrumbs.Any(crumb => crumb.Repository == target.Parent))
+            return;
+        await OpenSubmoduleFromAsync(target.Parent, target.Module, ct);
+    }
+
+    private async Task OpenSubmoduleFromAsync(RepositoryInfo parent, GitSubmoduleInfo module, CancellationToken ct)
+    {
+        var version = Interlocked.Read(ref _repositorySelectionVersion);
+        try
+        {
+            if (!module.IsCheckedOut)
+            {
+                if (IsNetworkBusy || IsFeatureBusy) return;
+                Status = $"Initializing submodule {module.DisplayName}…";
+                await _gitMutationLock.WaitAsync(ct);
+                try
+                {
+                    if (version != Interlocked.Read(ref _repositorySelectionVersion)) return;
+                    IsNetworkBusy = true;
+                    await new GitSubmoduleService().UpdateAsync(parent.Path, module.Name,
+                        NetworkOptions(version, remoteUrl: module.Url), ct);
+                }
+                finally
+                {
+                    IsNetworkBusy = false;
+                    NetworkProgressText = "";
+                    _gitMutationLock.Release();
+                }
+            }
+
+            ct.ThrowIfCancellationRequested();
+            if (version != Interlocked.Read(ref _repositorySelectionVersion)) return;
+            var path = Path.GetFullPath(Path.Combine(parent.Path, module.Path));
+            SelectedRepository = new RepositoryInfo(path, module.DisplayName) { Parent = parent };
+        }
+        catch (Exception error)
+        {
+            if (version == Interlocked.Read(ref _repositorySelectionVersion)) Status = PresentError(error);
+        }
     }
 
     public bool SubmoduleEditSucceeded { get; private set; }

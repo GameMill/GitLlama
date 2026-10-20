@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Switch between sibling submodules from the toolbar's submodule dropdown, with the current submodule marked. Keep the separate close button to return to the parent repository in the same tab.
 ## 0.3.1 - 2026-10-16
 
 - Keep repository creation errors in the dialog when a background refresh updates the status bar.

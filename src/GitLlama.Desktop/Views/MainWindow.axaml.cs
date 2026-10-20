@@ -590,6 +590,44 @@ public partial class MainWindow : Window
         ShowDocument("Changes");
     }
 
+    private async void RepositoryCrumb_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: RepositoryCrumb crumb } button || DataContext is not MainWindowViewModel vm)
+            return;
+        if (crumb.Repository.Parent is not { } parent)
+        {
+            vm.NavigateToRepositoryCommand.Execute(crumb.Repository);
+            return;
+        }
+
+        var current = vm.SelectedRepository;
+        try
+        {
+            var modules = await new GitLlama.Git.GitSubmoduleService().ListAsync(parent.Path);
+            if (vm.SelectedRepository != current) return;
+            var items = modules.OrderBy(module => module.Path, StringComparer.OrdinalIgnoreCase).Select(module =>
+            {
+                var selected = string.Equals(Path.GetFullPath(Path.Combine(parent.Path, module.Path)), crumb.Repository.Path,
+                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+                return new MenuItem
+                {
+                    Header = (selected ? "✓  " : "") + module.Path + (module.IsCheckedOut ? "" : " (not initialized)"),
+                    IsEnabled = !selected,
+                    Command = vm.SwitchSubmoduleCommand,
+                    CommandParameter = new SubmoduleNavigation(parent, module)
+                };
+            }).ToList();
+            if (items.Count == 0) items.Add(new MenuItem { Header = "No submodules", IsEnabled = false });
+            button.ContextMenu = new ContextMenu
+            {
+                ItemsSource = items,
+                Placement = PlacementMode.Bottom
+            };
+            button.ContextMenu.Open(button);
+        }
+        catch (Exception error) { vm.Status = vm.PresentError(error); }
+    }
+
     private void BranchPicker_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button button || DataContext is not MainWindowViewModel vm)

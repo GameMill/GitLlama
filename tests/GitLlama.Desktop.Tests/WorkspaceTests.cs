@@ -3414,17 +3414,30 @@ public sealed class WorkspaceTests
             child.Commit("Initial plugin", signature, signature);
         }
 
+        var siblingPath = Path.Combine(fixture.RepositoryPath, "libs", "Tools");
+        Repository.Clone(childPath, siblingPath);
+        using (var sibling = new Repository(siblingPath))
+        {
+            File.WriteAllText(Path.Combine(siblingPath, "Tools.cs"), "// tools\n");
+            Commands.Stage(sibling, "Tools.cs");
+            var signature = new Signature("Robert Fryer", "robert@example.com", DateTimeOffset.UtcNow);
+            sibling.Commit("Initial tools", signature, signature);
+        }
+
         using (var parent = new Repository(fixture.RepositoryPath))
         {
             File.WriteAllText(
                 Path.Combine(fixture.RepositoryPath, ".gitmodules"),
                 "[submodule \"UnrealSharp\"]\n\tpath = libs/UnrealSharp\n\turl = https://example.com/UnrealSharp.git\n"
+                + "[submodule \"Tools\"]\n\tpath = libs/Tools\n\turl = https://example.com/Tools.git\n"
             );
             Commands.Stage(parent, ".gitmodules");
             using var child = new Repository(childPath);
+            using var sibling = new Repository(siblingPath);
             var definition = TreeDefinition
                 .From(parent.ObjectDatabase.CreateTree(parent.Index))
-                .AddGitLink("libs/UnrealSharp", child.Head.Tip.Id);
+                .AddGitLink("libs/UnrealSharp", child.Head.Tip.Id)
+                .AddGitLink("libs/Tools", sibling.Head.Tip.Id);
             var tree = parent.ObjectDatabase.CreateTree(definition);
             var signature = new Signature("Robert Fryer", "robert@example.com", DateTimeOffset.UtcNow);
             var commit = parent.ObjectDatabase.CreateCommit(
@@ -3442,8 +3455,8 @@ public sealed class WorkspaceTests
 
         var vm = await fixture.OpenAsync();
         var root = vm.SelectedRepository!;
-        await WaitUntilAsync(() => vm.Submodules.Count == 1);
-        var module = vm.Submodules[0];
+        await WaitUntilAsync(() => vm.Submodules.Count == 2);
+        var module = vm.Submodules.Single(m => m.DisplayName == "UnrealSharp");
         Assert.Equal("UnrealSharp", module.DisplayName);
         Assert.True(module.IsCheckedOut);
         Assert.Equal("Up to date", module.Summary);
@@ -3479,7 +3492,27 @@ public sealed class WorkspaceTests
             Assert.Equal(2, bar.ItemCount);
             SavePreview(window, "submodule-entered.png");
 
-            vm.ExitSubmoduleCommand.Execute(null);
+            File.AppendAllText(Path.Combine(childPath, "Plugin.cs"), "// preserve this edit\n");
+            var picker = bar.GetVisualDescendants().OfType<Button>().Single(button =>
+                button.DataContext is RepositoryCrumb { IsSubmodule: true } && button.Content is StackPanel);
+            picker.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await WaitUntilAsync(() => picker.ContextMenu?.IsOpen == true);
+            var choices = picker.ContextMenu!.ItemsSource!.Cast<MenuItem>().ToArray();
+            Assert.Equal(2, choices.Length);
+            Assert.False(choices.Single(item => item.Header!.ToString()!.Contains("UnrealSharp")).IsEnabled);
+            var tools = choices.Single(item => item.Header!.ToString()!.Contains("libs/Tools"));
+            SavePreview(window, "submodule-switcher.png");
+            tools.Command!.Execute(tools.CommandParameter);
+            picker.ContextMenu.Close();
+            await WaitUntilAsync(() => vm.HistoryRows.Any(row => row.Subject == "Initial tools"));
+            Assert.Equal(Path.GetFullPath(siblingPath), vm.SelectedRepository!.Path);
+            Assert.Equal(root, vm.SelectedRepository.Parent);
+            Assert.Equal(tabs, vm.RepositoryWorkspaceTabs.Count);
+            Assert.Contains("preserve this edit", File.ReadAllText(Path.Combine(childPath, "Plugin.cs")));
+            Dispatcher.UIThread.RunJobs();
+            var close = bar.GetVisualDescendants().OfType<Button>().Single(button =>
+                button.DataContext is RepositoryCrumb { IsSubmodule: true } && Equals(button.Content, "×"));
+            close.Command!.Execute(close.CommandParameter);
             await WaitUntilAsync(() => vm.HistoryRows.Any(row => row.Subject == "Add UnrealSharp submodule"));
             Assert.Equal(root, vm.SelectedRepository);
             Assert.False(vm.IsInSubmodule);

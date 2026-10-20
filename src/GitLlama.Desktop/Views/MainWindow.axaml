@@ -340,33 +340,32 @@
                                                        Margin="2,8,2,0"
                                                        IsVisible="{Binding HasSeparator}" />
 
-                                            <Button Classes="workspace toolbar"
-                                                    Command="{Binding $parent[ItemsControl].DataContext.NavigateToRepositoryCommand}"
-                                                    CommandParameter="{Binding Repository}"
-                                                    ToolTip.Tip="{Binding Repository.Path}"
-                                                    Padding="6,2">
-                                                <StackPanel Spacing="1">
-                                                    <TextBlock Text="{Binding Caption}"
-                                                               Classes="muted"
-                                                               FontSize="10" />
-
-                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <Button Classes="workspace toolbar"
-                                                                Content="×"
-                                                                Command="{Binding $parent[ItemsControl].DataContext.ExitSubmoduleCommand}"
-                                                                IsVisible="{Binding IsSubmodule}"
-                                                                ToolTip.Tip="Close submodule and return to its parent"
-                                                                Padding="3,0"
-                                                                MinHeight="0"
-                                                                VerticalAlignment="Center" />
-
-                                                        <TextBlock Text="{Binding Name}"
-                                                                   FontWeight="SemiBold"
-                                                                   MaxWidth="220"
-                                                                   TextTrimming="CharacterEllipsis" />
+                                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="2">
+                                                <Button Classes="workspace toolbar"
+                                                        Content="×"
+                                                        Command="{Binding $parent[ItemsControl].DataContext.NavigateToRepositoryCommand}"
+                                                        CommandParameter="{Binding Repository.Parent}"
+                                                        IsVisible="{Binding IsSubmodule}"
+                                                        ToolTip.Tip="Close submodule and return to its parent"
+                                                        Padding="3,0"
+                                                        MinHeight="0"
+                                                        VerticalAlignment="Bottom"
+                                                        Margin="0,0,0,4" />
+                                                <Button Grid.Column="1"
+                                                        Classes="workspace toolbar"
+                                                        Click="RepositoryCrumb_Click"
+                                                        ToolTip.Tip="{Binding Repository.Path}"
+                                                        Padding="6,2">
+                                                    <StackPanel Spacing="1">
+                                                        <TextBlock Text="{Binding Caption}" Classes="muted" FontSize="10" />
+                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                                       MaxWidth="220" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="⌄" Classes="muted" IsVisible="{Binding IsSubmodule}" />
+                                                        </StackPanel>
                                                     </StackPanel>
-                                                </StackPanel>
-                                            </Button>
+                                                </Button>
+                                            </Grid>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
