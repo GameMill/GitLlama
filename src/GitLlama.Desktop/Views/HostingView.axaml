@@ -4,19 +4,18 @@
     <Grid Margin="10"
           RowDefinitions="Auto,Auto,*,Auto"
           RowSpacing="8">
-        <Grid ColumnDefinitions="*,*,110,Auto" ColumnSpacing="8">
-            <TextBox Watermark="GitHub owner" Text="{Binding GithubOwner}" />
-
-            <TextBox Grid.Column="1"
-                     Watermark="Repository"
-                     Text="{Binding GithubRepository}" />
-
-            <ComboBox Grid.Column="2"
+        <Grid ColumnDefinitions="*,110,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="3">
+                <TextBlock Text="Pull requests" FontSize="18" FontWeight="SemiBold" IsVisible="{Binding IsPullRequestWorkspace}" />
+                <TextBlock Text="All GitHub remotes in this repository" Classes="muted" IsVisible="{Binding IsPullRequestWorkspace}" />
+                <TextBlock Text="Issues" FontSize="18" FontWeight="SemiBold" IsVisible="{Binding !IsPullRequestWorkspace}" />
+            </StackPanel>
+            <ComboBox Grid.Column="1"
                       ItemsSource="{Binding HostingStates}"
                       SelectedItem="{Binding HostingState}" />
 
             <Button x:Name="RefreshItems"
-                    Grid.Column="3"
+                    Grid.Column="2"
                     Classes="workspace"
                     Content="Refresh"
                     IsEnabled="{Binding !IsHostingBusy}" />
@@ -36,12 +35,21 @@
 
         <Grid Grid.Row="2" ColumnDefinitions="*,4,*">
             <Grid RowDefinitions="*,Auto">
-                <ListBox x:Name="HostingItems" />
+                <ListBox x:Name="HostingItems">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="4" Margin="4,5">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
                 <Button x:Name="MoreItems"
                         Grid.Row="1"
                         Classes="workspace"
-                        Content="Load more" />
+                        Content="Retry incomplete list" />
             </Grid>
 
             <GridSplitter Grid.Column="1"
@@ -92,7 +100,7 @@
                                 Command="{Binding RequestPullRequestChangesCommand}" />
                     </WrapPanel>
 
-                    <Expander Header="Merge selected pull request" IsVisible="{Binding IsPullRequestWorkspace}">
+                    <Expander Header="Merge pull request on GitHub" IsVisible="{Binding IsPullRequestWorkspace}">
                         <StackPanel Spacing="8" Margin="8">
                             <TextBlock Text="GitHub checks the loaded head commit and repository merge rules before merging."
                                        Classes="muted"
@@ -101,7 +109,7 @@
                             <TextBox Text="{Binding MergePullRequestConfirmation}" Watermark="Type MERGE #number" />
 
                             <Button Classes="workspace"
-                                    Content="Merge pull request"
+                                    Content="Merge on GitHub"
                                     Command="{Binding MergePullRequestCommand}" />
                         </StackPanel>
                     </Expander>
@@ -113,6 +121,11 @@
 
                     <Expander Header="Create new item">
                         <StackPanel Spacing="8" Margin="8">
+                            <TextBlock Text="Destination for the new item" Classes="muted" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <TextBox Watermark="GitHub owner" Text="{Binding GithubOwner}" />
+                                <TextBox Grid.Column="1" Watermark="Repository" Text="{Binding GithubRepository}" />
+                            </Grid>
                             <TextBox Text="{Binding HostingDraftTitle}" Watermark="Title" />
 
                             <TextBox Text="{Binding HostingDraftBody}"

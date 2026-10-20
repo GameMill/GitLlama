@@ -247,11 +247,11 @@ public partial class MainWindowViewModel
             GithubOwner = repository.Owner;
             GithubRepository = repository.Name;
             Issues.Clear();
-            HostingComments.Clear();
+            if (!IsPullRequestWorkspace) HostingComments.Clear();
             SelectedIssue = null;
             HasMoreIssues = false;
             _pullPage = _issuePage = 1;
-            HostingDetails = "Select a pull request or issue.";
+            if (!IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
         }
     }
 

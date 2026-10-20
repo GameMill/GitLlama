@@ -391,6 +391,8 @@ public partial class SettingsView : UserControl
 public partial class HostingView : UserControl
 {
     private readonly bool _pullRequests;
+    private MainWindowViewModel? _hostingViewModel;
+    private bool _needsPullRequestLoad;
 
     public HostingView()
         : this(true) { }
@@ -423,6 +425,7 @@ public partial class HostingView : UserControl
                 Button.CommandProperty,
                 new Binding(pullRequests ? "CreatePullRequestCommand" : "CreateIssueCommand")
             );
+        if (!pullRequests) this.FindControl<Button>("MoreItems")!.Content = "Load more";
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -431,8 +434,36 @@ public partial class HostingView : UserControl
         if (DataContext is MainWindowViewModel vm)
         {
             vm.ActivateHostingView(_pullRequests);
+            _hostingViewModel = vm;
+            vm.PropertyChanged += HostingContextChanged;
+            _needsPullRequestLoad = _pullRequests;
+            QueueCombinedPullRequests();
         }
     }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        if (_hostingViewModel is { } vm) vm.PropertyChanged -= HostingContextChanged;
+        _hostingViewModel = null;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void HostingContextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!_pullRequests) return;
+        if (e.PropertyName is nameof(MainWindowViewModel.PullRequestRemoteSignature)
+            or nameof(MainWindowViewModel.HostingState) or nameof(MainWindowViewModel.GithubToken))
+            _needsPullRequestLoad = true;
+        if (_needsPullRequestLoad) QueueCombinedPullRequests();
+    }
+
+    private void QueueCombinedPullRequests() => Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+    {
+        if (!_needsPullRequestLoad || _hostingViewModel is not { } vm || vm.IsHostingBusy
+            || vm.PullRequestRemoteSignature.Length == 0) return;
+        _needsPullRequestLoad = false;
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+    });
 
     private async void OpenItem_Click(object? sender, RoutedEventArgs e)
     {

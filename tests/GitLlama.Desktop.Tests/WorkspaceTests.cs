@@ -3841,6 +3841,52 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task PullRequestWorkspaceAutomaticallyShowsEveryRemoteWithoutRepositorySwitching()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+        {
+            repo.Network.Remotes.Add("origin", "https://github.com/fork/repo.git");
+            repo.Network.Remotes.Add("upstream", "git@github.com:team/repo.git");
+        }
+        var provider = new FakeHostingProvider
+        {
+            PageLoader = (repository, _, state, page, _) => Task.FromResult(new HostingPage(
+                Enumerable.Range((page - 1) * 50 + 1, page == 1 ? 50 : 5).Select(number =>
+                    new HostingItem(number, $"{repository.Owner} {state} change {number}", "", state, "me",
+                        $"https://github.com/{repository.Owner}/repo/pull/{number}", true,
+                        new string('a', 40), "feature", "main")).ToArray(), page == 1))
+        };
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 2);
+        var view = new HostingView(true) { DataContext = vm };
+        var window = new Window { Content = view, Width = 1100, Height = 800 };
+        try
+        {
+            window.Show();
+            await WaitUntilAsync(() => vm.PullRequests.Count == 110 && !vm.IsHostingBusy);
+            var list = view.FindControl<ListBox>("HostingItems")!;
+            Assert.Equal(110, list.Items.Count);
+            Assert.Equal(55, vm.PullRequests.Count(pr => pr.Repository!.Owner == "fork"));
+            Assert.Equal(55, vm.PullRequests.Count(pr => pr.Repository!.Owner == "team"));
+            Assert.DoesNotContain(view.GetVisualDescendants().OfType<TextBox>(),
+                input => input.IsEffectivelyVisible && input.Watermark is "GitHub owner" or "Repository");
+            vm.SelectedPullRequest = vm.PullRequests.First(pr => pr.Repository!.Owner == "fork");
+            await WaitUntilAsync(() => vm.HostingComments.Count > 0);
+            vm.SelectedRemote = vm.Remotes.Single(remote => remote.Name == "upstream");
+            Assert.Contains("fork/repo", vm.HostingDetails);
+            Assert.NotEmpty(vm.HostingComments);
+            Assert.Equal(110, list.Items.Count);
+            vm.HostingState = "all";
+            await WaitUntilAsync(() => vm.PullRequests.Count == 110 && !vm.IsHostingBusy
+                && vm.PullRequests.All(pr => pr.State == "all"));
+            SavePreview(window, "combined-pull-request-workspace.png");
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public async Task PullRequestRightClickOpensMenuWithoutNavigatingOrCrashing()
     {
         using var fixture = new WorkspaceFixture();

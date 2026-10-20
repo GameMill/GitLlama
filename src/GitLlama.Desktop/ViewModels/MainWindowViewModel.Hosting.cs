@@ -16,7 +16,7 @@ public partial class MainWindowViewModel
     private void InvalidateHosting(bool clearPulls = true)
     {
         Interlocked.Increment(ref _hostingRevision);
-        Interlocked.Increment(ref _hostingCommentRevision);
+        if (clearPulls || !IsPullRequestWorkspace) Interlocked.Increment(ref _hostingCommentRevision);
         if (clearPulls)
         {
             Interlocked.Increment(ref _pullRequestRevision);
@@ -26,11 +26,11 @@ public partial class MainWindowViewModel
             HasMorePullRequests = false;
         }
         Issues.Clear();
-        HostingComments.Clear();
+        if (clearPulls || !IsPullRequestWorkspace) HostingComments.Clear();
         SelectedIssue = null;
         HasMoreIssues = false;
         _pullPage = _issuePage = 1;
-        HostingDetails = "Select a pull request or issue.";
+        if (clearPulls || !IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
     }
 
     partial void OnSelectedPullRequestChanged(HostingItem? value)

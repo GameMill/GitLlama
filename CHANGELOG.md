@@ -3,11 +3,10 @@
 ## Unreleased
 
 - Fix a crash when right-clicking a pull request by opening its context menu on the control that owns it. Keep right-click in the current workspace until an action is selected.
+- Open the pull request workspace with a combined list loaded automatically from all current GitHub remotes. Remove the individual repository bar, identify each PR's source, and preserve the selected PR's details when the Git remote selection changes.
 - Load every page of pull requests from the open repository's configured GitHub remotes, deduplicating aliases and hiding repositories without matching PRs. Keep PR comments, reviews, and merges scoped to their source repository, and clear previous results when switching repositories.
 - Add a searchable pull request tree grouped by author, assignments, requested reviews, and all loaded PRs. Right-click a PR to merge its head into the current local branch through the repository's existing remote, without adding contributor remotes or local branches. Preserve other branches, check the selected PR commit before merging, and use the existing conflict resolver.
-
 - Merge a remote-tracking branch directly into the checked-out local branch without creating or checking out a local copy. Preserve other local branches and use the existing conflict resolver when needed.
-
 - Switch between sibling submodules from the toolbar's submodule dropdown, with the current submodule marked. Keep the separate close button to return to the parent repository in the same tab.
 
 ## 0.3.1 - 2026-10-16
