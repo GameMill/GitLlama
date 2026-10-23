@@ -37,6 +37,27 @@ public partial class MainWindowViewModel
             return await service.ListAsync(token, ct);
         };
 
+    internal Func<
+        string,
+        CancellationToken,
+        Task<IReadOnlyList<CloneableRepository>>
+    > ForgejoCloneRepositoryLoader
+    {
+        get => _forgejoCloneRepositoryLoader ??= (token, ct) => LoadForgejoCloneRepositoriesAsync(token, ct);
+        set => _forgejoCloneRepositoryLoader = value;
+    }
+
+    private Func<string, CancellationToken, Task<IReadOnlyList<CloneableRepository>>>? _forgejoCloneRepositoryLoader;
+
+    private async Task<IReadOnlyList<CloneableRepository>> LoadForgejoCloneRepositoriesAsync(
+        string token,
+        CancellationToken ct
+    )
+    {
+        using var service = new ForgejoCloneCatalog(baseUri: ForgejoBaseUri());
+        return await service.ListAsync(token, ct);
+    }
+
     partial void OnCloneableRepositorySearchChanged(string value) =>
         OnPropertyChanged(nameof(FilteredCloneableRepositories));
 
@@ -90,8 +111,10 @@ public partial class MainWindowViewModel
         var profile = ActiveProfile?.Id;
         var azureRevision = Interlocked.Read(ref _azureRevision);
         var githubRevision = Interlocked.Read(ref _githubConnectionRevision);
+        var forgejoRevision = Interlocked.Read(ref _forgejoConnectionRevision);
         var azureConnections = AzureOrganizations.Select(org => org.Name).ToArray();
         var githubToken = IsGithubConnected ? GithubUsableToken : "";
+        var forgejoToken = IsForgejoConnected ? ForgejoUsableToken : "";
         var repositories = new List<CloneableRepository>();
         var failed = new List<string>();
         try
@@ -106,6 +129,18 @@ public partial class MainWindowViewModel
                 catch
                 {
                     failed.Add("GitHub");
+                }
+            }
+
+            if (!string.IsNullOrEmpty(forgejoToken))
+            {
+                try
+                {
+                    repositories.AddRange(await ForgejoCloneRepositoryLoader(forgejoToken, timeout.Token));
+                }
+                catch
+                {
+                    failed.Add("Forgejo");
                 }
             }
 
@@ -134,6 +169,7 @@ public partial class MainWindowViewModel
                 || profile != ActiveProfile?.Id
                 || azureRevision != Interlocked.Read(ref _azureRevision)
                 || githubRevision != Interlocked.Read(ref _githubConnectionRevision)
+                || forgejoRevision != Interlocked.Read(ref _forgejoConnectionRevision)
             )
             {
                 return;
@@ -156,8 +192,10 @@ public partial class MainWindowViewModel
                         + string.Join(", ", failed)
                         + ". Check those connections in Settings > Integrations, then refresh."
                 : repositories.Count > 0 ? $"{CloneableRepositories.Count} repositories available to clone."
-                : azureConnections.Length == 0 && string.IsNullOrEmpty(githubToken)
-                    ? "Connect GitHub or Azure DevOps in Settings > Integrations to browse repositories."
+                : azureConnections.Length == 0
+                    && string.IsNullOrEmpty(githubToken)
+                    && string.IsNullOrEmpty(forgejoToken)
+                    ? "Connect GitHub, Forgejo or Azure DevOps in Settings > Integrations to browse repositories."
                 : "No repositories were returned by your connected accounts.";
         }
         finally

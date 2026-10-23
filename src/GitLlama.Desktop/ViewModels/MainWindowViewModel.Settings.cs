@@ -182,5 +182,7 @@ public partial class MainWindowViewModel : IDisposable
         {
             provider.Dispose();
         }
+
+        _forgejoProvider?.Dispose();
     }
 }

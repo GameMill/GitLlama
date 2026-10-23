@@ -21,6 +21,7 @@ public partial class MainWindowViewModel
         {
             Interlocked.Increment(ref _pullRequestRevision);
             _pullRequestLogin = "";
+            _forgejoLogin = "";
             PullRequests.Clear();
             SelectedPullRequest = null;
             HasMorePullRequests = false;
@@ -67,13 +68,16 @@ public partial class MainWindowViewModel
         }
     }
 
-    private HostingRepository HostingTarget(HostingItem? item = null) => item?.Repository ?? new(GithubOwner.Trim(), GithubRepository.Trim());
+    private HostingRepository HostingTarget(HostingItem? item = null) =>
+        item?.Repository
+        ?? new(GithubOwner.Trim(), GithubRepository.Trim()) { Provider = _hostingProviderKind };
 
     private async Task ShowHostingItemAsync(HostingItem item)
     {
         var revision = Interlocked.Increment(ref _hostingCommentRevision);
         var repository = HostingTarget(item);
-        var token = GithubToken;
+        var provider = HostingProviderFor(repository);
+        var token = HostingTokenFor(repository);
         HostingDetails =
             $"{repository.Owner}/{repository.Name} · #{item.Number} {item.Title}\n{item.State} · {item.Author}\n{item.HeadBranch}{(item.IsPullRequest ? " → " + item.BaseBranch : "")}\n\n{item.Body}";
         HostingComments.Clear();
@@ -81,7 +85,7 @@ public partial class MainWindowViewModel
         MergePullRequestConfirmation = "";
         try
         {
-            var comments = await _hostingProvider.CommentsAsync(repository, item.Number, token);
+            var comments = await provider.CommentsAsync(repository, item.Number, token);
             if (revision != Interlocked.Read(ref _hostingCommentRevision))
             {
                 return;
@@ -122,15 +126,17 @@ public partial class MainWindowViewModel
         }
 
         var repository = HostingTarget();
-        var token = GithubToken;
+        var provider = HostingProviderFor(repository);
+        var providerName = HostingProviders.DisplayName(repository.Provider);
+        var token = HostingTokenFor(repository);
         var state = HostingState;
         var revision = Interlocked.Increment(ref _hostingRevision);
         var page = more ? (pulls ? _pullPage : _issuePage) + 1 : 1;
         IsHostingBusy = true;
-        HostingStatus = "Loading from GitHub…";
+        HostingStatus = $"Loading from {providerName}…";
         try
         {
-            var result = await _hostingProvider.ListAsync(repository, false, state, page, token);
+            var result = await provider.ListAsync(repository, false, state, page, token);
             if (revision != Interlocked.Read(ref _hostingRevision)) return;
             var items = Issues;
             if (!more) items.Clear();
@@ -147,14 +153,14 @@ public partial class MainWindowViewModel
         {
             if (revision == Interlocked.Read(ref _hostingRevision))
             {
-                HostingStatus = "GitHub request timed out. Refresh to retry.";
+                HostingStatus = $"{providerName} request timed out. Refresh to retry.";
             }
         }
         catch (Exception e)
         {
             if (revision == Interlocked.Read(ref _hostingRevision))
             {
-                HostingStatus = "Could not reach GitHub: " + PresentError(e);
+                HostingStatus = $"Could not reach {providerName}: " + PresentError(e);
             }
         }
         finally
@@ -164,8 +170,12 @@ public partial class MainWindowViewModel
         }
     }
 
-    private async Task RunHostingChangeAsync(Func<HostingRepository, string, Task> change, bool pulls, string success,
-        HostingRepository? target = null)
+    private async Task RunHostingChangeAsync(
+        Func<IHostingProvider, HostingRepository, string, Task> change,
+        bool pulls,
+        string success,
+        HostingRepository? target = null
+    )
     {
         if (IsHostingBusy)
         {
@@ -173,13 +183,14 @@ public partial class MainWindowViewModel
         }
 
         var repository = target ?? HostingTarget();
-        var token = GithubToken;
+        var provider = HostingProviderFor(repository);
+        var token = HostingTokenFor(repository);
         var revision = Interlocked.Read(ref _hostingRevision);
         IsHostingBusy = true;
         var completed = false;
         try
         {
-            await change(repository, token);
+            await change(provider, repository, token);
             completed = true;
             if (revision == Interlocked.Read(ref _hostingRevision))
             {
@@ -211,7 +222,7 @@ public partial class MainWindowViewModel
         var title = HostingDraftTitle;
         var body = HostingDraftBody;
         return RunHostingChangeAsync(
-            async (repo, token) => await _hostingProvider.CreateAsync(repo, title, body, null, null, token),
+            async (provider, repo, token) => await provider.CreateAsync(repo, title, body, null, null, token),
             false,
             "Issue created."
         );
@@ -225,7 +236,7 @@ public partial class MainWindowViewModel
         var head = PullRequestHead;
         var @base = PullRequestBase;
         return RunHostingChangeAsync(
-            async (repo, token) => await _hostingProvider.CreateAsync(repo, title, body, head, @base, token),
+            async (provider, repo, token) => await provider.CreateAsync(repo, title, body, head, @base, token),
             true,
             "Pull request created."
         );
@@ -239,7 +250,7 @@ public partial class MainWindowViewModel
         return item is null
             ? Task.CompletedTask
             : RunHostingChangeAsync(
-                (repo, token) => _hostingProvider.CommentAsync(repo, item.Number, body, token),
+                (provider, repo, token) => provider.CommentAsync(repo, item.Number, body, token),
                 item.IsPullRequest,
                 "Comment posted.", HostingTarget(item)
             );
@@ -258,7 +269,7 @@ public partial class MainWindowViewModel
         return item is null
             ? Task.CompletedTask
             : RunHostingChangeAsync(
-                (repo, token) => _hostingProvider.ReviewAsync(repo, item.Number, item.HeadSha, action, body, token),
+                (provider, repo, token) => provider.ReviewAsync(repo, item.Number, item.HeadSha, action, body, token),
                 true,
                 "Review submitted.", HostingTarget(item)
             );
@@ -280,7 +291,7 @@ public partial class MainWindowViewModel
         }
 
         return RunHostingChangeAsync(
-            (repo, token) => _hostingProvider.MergeAsync(repo, item.Number, item.HeadSha, token),
+            (provider, repo, token) => provider.MergeAsync(repo, item.Number, item.HeadSha, token),
             true,
             "Pull request merged.", HostingTarget(item)
         );
@@ -293,8 +304,8 @@ public partial class MainWindowViewModel
         return item is null
             ? Task.CompletedTask
             : RunHostingChangeAsync(
-                (repo, token) =>
-                    _hostingProvider.SetIssueStateAsync(
+                (provider, repo, token) =>
+                    provider.SetIssueStateAsync(
                         repo,
                         item.Number,
                         item.State == "open" ? "closed" : "open",

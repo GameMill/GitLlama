@@ -415,7 +415,7 @@ public partial class MainWindowViewModel
 
         var redacted = SecretRedactor.Redact(value);
         foreach (
-            var secret in new[] { NetworkSecret, GithubToken, AzurePatInput }.Concat(_azurePersonalAccessTokens.Values)
+            var secret in new[] { NetworkSecret, GithubToken, ForgejoToken, AzurePatInput }.Concat(_azurePersonalAccessTokens.Values)
         )
         {
             if (!string.IsNullOrEmpty(secret))

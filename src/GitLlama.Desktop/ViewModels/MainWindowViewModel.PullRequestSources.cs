@@ -10,11 +10,13 @@ public partial class MainWindowViewModel
     private string _pullRequestSourceKey = "";
     [ObservableProperty] private bool isPullRequestLoading;
 
-    private HostingRepository[] RemotePullRequestRepositories() => Remotes.Select(remote => GitHubProvider.FromRemote(remote.Url))
-        .OfType<HostingRepository>().DistinctBy(repo => repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase)
-        .OrderBy(repo => repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    private HostingRepository[] RemotePullRequestRepositories() => Remotes.Select(remote => HostingProviderResolver.FromRemote(remote.Url))
+        .OfType<HostingRepository>().DistinctBy(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase)
+        .OrderBy(repo => repo.Provider, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(repo => repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase).ToArray();
 
-    public string PullRequestRemoteSignature => string.Join("|", RemotePullRequestRepositories().Select(repo => repo.Owner + "/" + repo.Name));
+    public string PullRequestRemoteSignature => string.Join("|", RemotePullRequestRepositories()
+        .Select(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name));
 
     private void UpdatePullRequestSources()
     {
@@ -37,13 +39,12 @@ public partial class MainWindowViewModel
             PullRequests.Clear();
             SelectedPullRequest = null;
             HasMorePullRequests = false;
-            HostingStatus = "Add a GitHub remote to load pull requests.";
+            HostingStatus = "Add a GitHub or Forgejo remote to load pull requests.";
             return;
         }
         var revision = Interlocked.Increment(ref _pullRequestRevision);
         var version = Interlocked.Read(ref _repositorySelectionVersion);
         var sourceKey = PullRequestRemoteSignature;
-        var token = GithubToken;
         var state = HostingState;
         bool Current() => revision == Interlocked.Read(ref _pullRequestRevision)
             && version == Interlocked.Read(ref _repositorySelectionVersion)
@@ -53,9 +54,24 @@ public partial class MainWindowViewModel
         var failures = new List<string>();
         try
         {
-            var login = _githubConnection?.Login ?? (token.Length > 0 ? await _hostingProvider.AuthenticatedUserAsync(token, ct) : "");
+            var githubToken = targets.Any(target => target.Provider == HostingProviders.GitHub) ? GithubToken : "";
+            var login = _githubConnection?.Login ?? (githubToken.Length > 0 ? await _hostingProvider.AuthenticatedUserAsync(githubToken, ct) : "");
+            var forgejoLogin = "";
+            if (targets.Any(target => target.Provider == HostingProviders.Forgejo) && ForgejoUsableToken.Length > 0)
+            {
+                try
+                {
+                    forgejoLogin = await ForgejoProviderInstance().AuthenticatedUserAsync(ForgejoUsableToken, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch { }
+            }
+
             foreach (var target in targets)
             {
+                var provider = HostingProviderFor(target);
+                var token = HostingTokenFor(target);
+                var providerName = HostingProviders.DisplayName(target.Provider);
                 var found = new Dictionary<int, HostingItem>();
                 try
                 {
@@ -64,13 +80,13 @@ public partial class MainWindowViewModel
                         ct.ThrowIfCancellationRequested();
                         if (!Current()) return;
                         HostingStatus = $"Loading {target.Owner}/{target.Name} · page {page}…";
-                        var result = await _hostingProvider.ListAsync(target, true, state, page, token, ct);
+                        var result = await provider.ListAsync(target, true, state, page, token, ct);
                         if (!Current()) return;
                         var added = 0;
                         foreach (var item in result.Items)
                             if (found.TryAdd(item.Number, item with { Repository = target })) added++;
                         if (!result.HasMore) break;
-                        if (added == 0) throw new InvalidOperationException("GitHub repeated a page. Refresh to retry the complete list.");
+                        if (added == 0) throw new InvalidOperationException($"{providerName} repeated a page. Refresh to retry the complete list.");
                     }
                     collected.AddRange(found.Values);
                 }
@@ -83,6 +99,7 @@ public partial class MainWindowViewModel
             foreach (var item in collected) PullRequests.Add(item);
             _updatingPullRequests = false;
             _pullRequestLogin = login;
+            _forgejoLogin = forgejoLogin;
             HasMorePullRequests = failures.Count > 0;
             RebuildPullRequestTree();
             HostingStatus = $"{PullRequests.Count} pull requests from {targets.Length - failures.Count} repositories loaded.";

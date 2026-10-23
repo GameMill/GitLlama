@@ -12,6 +12,7 @@ using GitLlama.Desktop.ViewModels;
 using GitLlama.Desktop.Views;
 using GitLlama.Git;
 using GitLlama.Infrastructure;
+using GitLlama.Providers;
 using LibGit2Sharp;
 using Xunit;
 
@@ -3750,6 +3751,67 @@ public sealed class WorkspaceTests
         {
             window.Close();
             Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task ForgejoSettingsPersistAndExposeTheIntegrationCard()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        var previousBaseUrl = ForgejoDefaults.ConfiguredBaseUrl;
+        try
+        {
+            vm.ForgejoBaseUrl = "http://forgejo.local:3000";
+            Assert.Equal(new Uri("http://forgejo.local:3000/"), ForgejoDefaults.BaseUri);
+            Assert.Equal("http://forgejo.local:3000/user/settings/applications", vm.ForgejoTokenPageUrl);
+            Assert.True(IntegrationBrowserPolicy.AllowsForgejo(new Uri(vm.ForgejoTokenPageUrl)));
+            Assert.True(IntegrationBrowserPolicy.Allows(new Uri(vm.ForgejoTokenPageUrl)));
+            Assert.False(
+                IntegrationBrowserPolicy.AllowsForgejo(
+                    new Uri("http://forgejo.local:3001/user/settings/applications")
+                )
+            );
+            Assert.False(
+                IntegrationBrowserPolicy.AllowsForgejo(
+                    new Uri("http://attacker.example:3000/user/settings/applications")
+                )
+            );
+
+            var settingsPath = Path.Combine(fixture.SettingsPath, "settings.json");
+            await WaitUntilAsync(() => File.Exists(settingsPath) && File.ReadAllText(settingsPath).Contains("forgejo.local:3000"));
+            var saved = await new JsonSettingsStore(fixture.SettingsPath).LoadAsync();
+            Assert.Equal("http://forgejo.local:3000", saved.ForgejoBaseUrl);
+
+            var template = new DockContentTemplate(vm);
+            Avalonia.Application.Current!.DataTemplates.Add(template);
+            var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+            try
+            {
+                window.Show();
+                window.ShowDocument("Settings");
+                vm.SelectedSettingsSection = "Integrations";
+                Dispatcher.UIThread.RunJobs();
+                var settings = window.GetVisualDescendants().OfType<SettingsView>().Single();
+                settings.FindControl<Expander>("ForgejoIntegrationExpander")!.IsExpanded = true;
+                Dispatcher.UIThread.RunJobs();
+                var baseUrl = settings.FindControl<TextBox>("ForgejoBaseUrlInput");
+                Assert.NotNull(baseUrl);
+                Assert.Equal("http://forgejo.local:3000", baseUrl.Text);
+                Assert.NotEqual('\0', settings.FindControl<TextBox>("ForgejoTokenInput")!.PasswordChar);
+                Assert.NotNull(settings.FindControl<Button>("ForgejoConnectButton"));
+                Assert.NotNull(settings.FindControl<Button>("ForgejoDisconnectButton"));
+            }
+            finally
+            {
+                window.Close();
+                Avalonia.Application.Current.DataTemplates.Remove(template);
+            }
+        }
+        finally
+        {
+            ForgejoDefaults.ConfiguredBaseUrl = previousBaseUrl;
         }
     }
 

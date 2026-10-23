@@ -32,7 +32,8 @@ public sealed record GitLlamaSettings(
     string SshPublicKeyPath = "",
     List<SettingsProfile>? Profiles = null,
     string? ActiveProfileId = null,
-    bool LoadAvatars = true
+    bool LoadAvatars = true,
+    string ForgejoBaseUrl = HostingDefaults.ForgejoBaseUrl
 );
 
 public sealed class JsonSettingsStore

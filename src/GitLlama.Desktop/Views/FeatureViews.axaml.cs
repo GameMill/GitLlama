@@ -475,8 +475,13 @@ public partial class HostingView : UserControl
         var item = _pullRequests ? vm.SelectedPullRequest : vm.SelectedIssue;
         if (
             Uri.TryCreate(item?.Url, UriKind.Absolute, out var uri)
-            && uri.Scheme == "https"
-            && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+            && (
+                (
+                    uri.Scheme == "https"
+                    && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+                )
+                || IntegrationBrowserPolicy.AllowsForgejo(uri)
+            )
             && TopLevel.GetTopLevel(this)?.Launcher is { } launcher
         )
         {

@@ -186,7 +186,7 @@
 
                     <StackPanel IsVisible="{Binding IsAuthenticationSettings}" Spacing="16">
                         <TextBlock Text="Advanced Git connections" FontSize="18" FontWeight="SemiBold" />
-                        <TextBlock Text="Most users only need Integrations for GitHub or Azure DevOps, and SSH for key-based connections. These fallback options support other HTTPS hosts or an existing system Git setup."
+                        <TextBlock Text="Most users only need Integrations for GitHub, Forgejo or Azure DevOps, and SSH for key-based connections. These fallback options support other HTTPS hosts or an existing system Git setup."
                                    Classes="muted" TextWrapping="Wrap" />
                         <Button Classes="workspace primary" Content="Manage connected accounts"
                                 Command="{Binding OpenSettingsSectionCommand}" CommandParameter="Integrations"
@@ -375,6 +375,64 @@
                         <TextBlock Text="Use integrations for pull requests, issues and repository access. Each profile keeps its own connected accounts."
                                    TextWrapping="Wrap"
                                    Classes="muted" />
+
+                        <Border Classes="card">
+                            <Expander x:Name="ForgejoIntegrationExpander"
+                                      Classes="navigation"
+                                      IsExpanded="{Binding IsForgejoIntegrationExpanded}">
+                                <Expander.Header>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Forgejo"
+                                                   FontSize="18"
+                                                   FontWeight="SemiBold" />
+
+                                        <TextBlock Text="{Binding ForgejoAccountStatus}"
+                                                   Classes="muted"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Expander.Header>
+
+                                <StackPanel Spacing="12" Margin="8,14,8,8">
+                                    <TextBlock Text="Connect to your self-hosted Forgejo server with a personal access token. The token is sent only to this server; prefer SSH remotes for Git transport."
+                                               Classes="muted"
+                                               TextWrapping="Wrap" />
+
+                                    <TextBox x:Name="ForgejoBaseUrlInput"
+                                             Text="{Binding ForgejoBaseUrl}"
+                                             Watermark="Forgejo server URL, e.g. http://192.168.0.165:3000/"
+                                             IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                    <TextBox x:Name="ForgejoTokenInput"
+                                             Text="{Binding ForgejoToken}"
+                                             PasswordChar="●"
+                                             Watermark="Personal access token"
+                                             IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                    <WrapPanel ItemSpacing="8">
+                                        <Button x:Name="ForgejoConnectButton"
+                                                Classes="workspace primary"
+                                                Content="Connect"
+                                                Command="{Binding ConnectForgejoCommand}"
+                                                IsEnabled="{Binding !IsAuthenticationBusy}" />
+
+                                        <Button Classes="workspace"
+                                                Content="Open token settings"
+                                                Command="{Binding OpenForgejoTokensCommand}" />
+
+                                        <Button x:Name="ForgejoDisconnectButton"
+                                                Classes="workspace"
+                                                Content="Disconnect"
+                                                IsVisible="{Binding CanDisconnectForgejo}"
+                                                Command="{Binding DisconnectForgejoCommand}"
+                                                IsEnabled="{Binding !IsAuthenticationBusy}" />
+                                    </WrapPanel>
+
+                                    <TextBlock Text="{Binding ForgejoStorageFeedback}"
+                                               Classes="muted"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Expander>
+                        </Border>
 
                         <Border Classes="card">
                             <Expander x:Name="GithubIntegrationExpander"

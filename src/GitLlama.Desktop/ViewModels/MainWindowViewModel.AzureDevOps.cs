@@ -182,6 +182,7 @@ public partial class MainWindowViewModel
     private async Task RestoreProfileIntegrationsAsync()
     {
         await RestoreGithubConnectionAsync();
+        await RestoreForgejoConnectionAsync();
         await RestoreAzureConnectionAsync();
     }
 

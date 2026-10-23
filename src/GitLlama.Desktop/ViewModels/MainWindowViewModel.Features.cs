@@ -141,7 +141,7 @@ public partial class MainWindowViewModel
     private bool isHostingBusy;
 
     [ObservableProperty]
-    private string hostingStatus = "Choose a GitHub repository and refresh to load items.";
+    private string hostingStatus = "Choose a GitHub or Forgejo repository and refresh to load items.";
 
     [ObservableProperty]
     private HostingItem? selectedPullRequest;
@@ -217,8 +217,9 @@ public partial class MainWindowViewModel
         HostingComments.Clear();
         SelectedPullRequest = SelectedIssue = null;
         HostingDetails = "Select a pull request or issue.";
-        HostingStatus = "Choose a GitHub repository and refresh to load items.";
+        HostingStatus = "Choose a GitHub or Forgejo repository and refresh to load items.";
         GithubOwner = GithubRepository = "";
+        _hostingProviderKind = HostingProviders.GitHub;
         _pullPage = _issuePage = 1;
     }
 
@@ -232,7 +233,10 @@ public partial class MainWindowViewModel
         }
 
         NetworkCredentialHost = host;
-        var repository = GitHubProvider.FromRemote(remote?.Url ?? "");
+        var repository = HostingProviderResolver.FromRemote(remote?.Url);
+        var providerKind = repository?.Provider ?? HostingProviders.GitHub;
+        var providerChanged = _hostingProviderKind != providerKind;
+        _hostingProviderKind = providerKind;
         if (remote is not null && AzureDevOpsRemote.Parse(remote.Url) is not null)
         {
             GithubOwner = GithubRepository = "";
@@ -241,17 +245,36 @@ public partial class MainWindowViewModel
                 HostingStatus = "Azure pull requests and Boards are not connected yet. Use Integrations for Azure repository access.";
         }
 
-        if (repository is not null && (GithubOwner != repository.Owner || GithubRepository != repository.Name))
+        if (
+            repository is not null
+            && (
+                GithubOwner != repository.Owner
+                || GithubRepository != repository.Name
+                || providerChanged
+            )
+        )
         {
-            Interlocked.Increment(ref _hostingRevision);
+            if (providerChanged)
+            {
+                InvalidateHosting();
+            }
+            else
+            {
+                Interlocked.Increment(ref _hostingRevision);
+                Issues.Clear();
+                if (!IsPullRequestWorkspace) HostingComments.Clear();
+                SelectedIssue = null;
+                HasMoreIssues = false;
+                _pullPage = _issuePage = 1;
+                if (!IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
+            }
+
             GithubOwner = repository.Owner;
             GithubRepository = repository.Name;
-            Issues.Clear();
-            if (!IsPullRequestWorkspace) HostingComments.Clear();
-            SelectedIssue = null;
-            HasMoreIssues = false;
-            _pullPage = _issuePage = 1;
-            if (!IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
+        }
+        else if (providerChanged)
+        {
+            InvalidateHosting();
         }
     }
 
@@ -484,7 +507,7 @@ public partial class MainWindowViewModel
     {
         var message = e.Message;
         foreach (
-            var secret in new[] { NetworkSecret, GithubToken, AzurePatInput }.Concat(_azurePersonalAccessTokens.Values)
+            var secret in new[] { NetworkSecret, GithubToken, ForgejoToken, AzurePatInput }.Concat(_azurePersonalAccessTokens.Values)
         )
         {
             if (!string.IsNullOrEmpty(secret))

@@ -1,6 +1,27 @@
 namespace GitLlama.Core;
 
-public sealed record HostingRepository(string Owner, string Name);
+public static class HostingProviders
+{
+    public const string GitHub = "github";
+    public const string Forgejo = "forgejo";
+
+    public static string DisplayName(string provider) =>
+        provider switch
+        {
+            Forgejo => "Forgejo",
+            _ => "GitHub",
+        };
+}
+
+public static class HostingDefaults
+{
+    public const string ForgejoBaseUrl = "http://192.168.0.165:3000/";
+}
+
+public sealed record HostingRepository(string Owner, string Name)
+{
+    public string Provider { get; init; } = HostingProviders.GitHub;
+}
 
 public sealed record HostingItem(
     int Number,
@@ -20,6 +41,7 @@ public sealed record HostingItem(
     public bool IsDraft { get; init; }
     public bool IsMerged { get; init; }
     public HostingRepository? Repository { get; init; }
+    public string Provider { get; init; } = HostingProviders.GitHub;
     public override string ToString() => (Repository is null ? "" : $"{Repository.Owner}/{Repository.Name} · ")
         + $"#{Number}  {Title} · {State} · {Author}";
 }

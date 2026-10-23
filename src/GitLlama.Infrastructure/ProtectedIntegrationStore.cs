@@ -15,6 +15,13 @@ public sealed class GithubStoredConnection
     public DateTimeOffset? RefreshExpiresAt { get; init; }
 }
 
+public sealed class ForgejoStoredConnection
+{
+    public string BaseUrl { get; init; } = "";
+    public string Login { get; init; } = "";
+    public string AccessToken { get; init; } = "";
+}
+
 /// <summary>Per-profile credentials protected with Windows DPAPI for the current OS user.</summary>
 public sealed class ProtectedIntegrationStore(string settingsDirectory)
 {
@@ -23,7 +30,7 @@ public sealed class ProtectedIntegrationStore(string settingsDirectory)
     private string FilePath(string profileId, string provider = "github")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(profileId);
-        if (provider is not ("github" or "azure"))
+        if (provider is not ("github" or "azure" or "forgejo"))
         {
             throw new ArgumentException("Unknown integration.");
         }

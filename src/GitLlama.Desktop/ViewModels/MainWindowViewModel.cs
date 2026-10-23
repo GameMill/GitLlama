@@ -1148,6 +1148,9 @@ public partial class MainWindowViewModel : ObservableObject
         try
         {
             var data = await _settings.LoadAsync();
+            ForgejoBaseUrl = string.IsNullOrWhiteSpace(data.ForgejoBaseUrl)
+                ? HostingDefaults.ForgejoBaseUrl
+                : data.ForgejoBaseUrl;
             foreach (var repository in data.Repositories)
             {
                 Repositories.Add(repository);
@@ -1455,7 +1458,8 @@ public partial class MainWindowViewModel : ObservableObject
                 SshPublicKeyPath: SshPublicKeyPath,
                 Profiles: Profiles.ToList(),
                 ActiveProfileId: ActiveProfile?.Id,
-                LoadAvatars: LoadAvatars
+                LoadAvatars: LoadAvatars,
+                ForgejoBaseUrl: ForgejoBaseUrl
             );
             await _settings.SaveAsync(snapshot);
         }

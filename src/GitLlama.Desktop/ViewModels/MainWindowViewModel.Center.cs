@@ -57,7 +57,7 @@ public partial class MainWindowViewModel
         if (
             value?.IsEmpty == true
             && !_openingCloneCatalog
-            && (_azurePersonalAccessTokens.Count > 0 || IsGithubConnected)
+            && (_azurePersonalAccessTokens.Count > 0 || IsGithubConnected || IsForgejoConnected)
         )
         {
             _ = RefreshCloneableRepositoriesAsync();

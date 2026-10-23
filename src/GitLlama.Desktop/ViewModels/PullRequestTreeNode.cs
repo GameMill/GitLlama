@@ -24,13 +24,17 @@ public partial class MainWindowViewModel
 {
     public ObservableCollection<PullRequestTreeNode> PullRequestTree { get; } = [];
     private string _pullRequestLogin = "";
+    private string _forgejoLogin = "";
     private bool _updatingPullRequests;
     internal bool SuppressPullRequestNavigation { get; set; }
     [ObservableProperty] private string pullRequestSearch = "";
     [ObservableProperty] private PullRequestTreeNode? selectedPullRequestNode;
     public string PullRequestCount => PullRequests.Count + (HasMorePullRequests ? "+" : "");
-    public string PullRequestAccountHint => _pullRequestLogin.Length > 0 ? "" : "Connect GitHub to see your PRs, assignments, and review requests.";
-    public bool HasPullRequestAccountHint => _pullRequestLogin.Length == 0;
+    public string PullRequestAccountHint =>
+        _pullRequestLogin.Length > 0 || _forgejoLogin.Length > 0
+            ? ""
+            : "Connect GitHub or Forgejo to see your PRs, assignments, and review requests.";
+    public bool HasPullRequestAccountHint => _pullRequestLogin.Length == 0 && _forgejoLogin.Length == 0;
     partial void OnHasMorePullRequestsChanged(bool value) => OnPropertyChanged(nameof(PullRequestCount));
 
     private void InitializePullRequestTree()
@@ -53,7 +57,9 @@ public partial class MainWindowViewModel
     private void RebuildPullRequestTree()
     {
         var search = PullRequestSearch.Trim();
-        bool Me(string login) => _pullRequestLogin.Length > 0 && login.Equals(_pullRequestLogin, StringComparison.OrdinalIgnoreCase);
+        bool Me(string login) =>
+            (_pullRequestLogin.Length > 0 && login.Equals(_pullRequestLogin, StringComparison.OrdinalIgnoreCase))
+            || (_forgejoLogin.Length > 0 && login.Equals(_forgejoLogin, StringComparison.OrdinalIgnoreCase));
         var visible = PullRequests.Where(pr => search.Length == 0 || $"{pr.Repository?.Owner}/{pr.Repository?.Name} #{pr.Number} {pr.Title} {pr.Author} {pr.HeadBranch} {pr.BaseBranch}"
             .Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
         foreach (var group in PullRequestTree)
@@ -95,12 +101,14 @@ public partial class MainWindowViewModel
         var hosting = HostingTarget(item);
         var hostingRevision = Interlocked.Read(ref _pullRequestRevision);
         var version = Interlocked.Read(ref _repositorySelectionVersion);
-        var source = Remotes.FirstOrDefault(remote => GitLlama.Providers.GitHubProvider.FromRemote(remote.Url) is { } candidate
+        var source = Remotes.FirstOrDefault(remote => GitLlama.Providers.HostingProviderResolver.FromRemote(remote.Url) is { } candidate
+            && candidate.Provider == hosting.Provider
             && candidate.Owner.Equals(hosting.Owner, StringComparison.OrdinalIgnoreCase)
             && candidate.Name.Equals(hosting.Name, StringComparison.OrdinalIgnoreCase));
         if (source is null)
         {
-            Status = PresentError(new InvalidOperationException("Select a GitHub repository remote before merging its pull request into your current branch."));
+            Status = PresentError(new InvalidOperationException(
+                $"Select a {HostingProviders.DisplayName(hosting.Provider)} repository remote before merging its pull request into your current branch."));
             return;
         }
         try { await _gitMutationLock.WaitAsync(ct); }
@@ -117,12 +125,17 @@ public partial class MainWindowViewModel
             IsNetworkBusy = true;
             Status = $"Fetching and merging PR #{item.Number} into {CurrentBranch}…";
             var defaults = NetworkOptions(version, remoteUrl: source.Url);
-            var oauth = GithubUsableToken;
+            var oauth = hosting.Provider == HostingProviders.Forgejo ? ForgejoUsableToken : GithubUsableToken;
+            var credentialHost = Uri.TryCreate(source.Url, UriKind.Absolute, out var sourceUri) ? sourceUri.Authority : "";
             var network = GitSystemTransport.IsSsh(source.Url) ? defaults : new GitNetworkOptions
             {
-                CredentialHost = "github.com",
-                Username = oauth.Length > 0 ? "x-access-token" : NetworkUsername,
-                Secret = oauth.Length > 0 ? oauth : NetworkCredentialHost.Equals("github.com", StringComparison.OrdinalIgnoreCase) ? NetworkSecret : "",
+                CredentialHost = credentialHost,
+                Username = oauth.Length > 0
+                    ? hosting.Provider == HostingProviders.Forgejo
+                        ? _forgejoConnection?.Login ?? "oauth2"
+                        : "x-access-token"
+                    : NetworkUsername,
+                Secret = oauth.Length > 0 ? oauth : NetworkCredentialHost.Equals(credentialHost, StringComparison.OrdinalIgnoreCase) ? NetworkSecret : "",
                 UseCredentialManager = UseCredentialManager,
                 RepositoryPath = repository.Path, Progress = defaults.Progress
             };

@@ -117,6 +117,7 @@ public partial class MainWindowViewModel
             SshPrivateKeyPath = profile.SshPrivateKeyPath;
             NetworkSecret = NetworkUsername = "";
             ClearGithubConnectionMemory();
+            ClearForgejoConnectionMemory();
             ClearAzureConnectionMemory();
             AuthenticationFeedback = "Choose a connection method, then check access to your repository.";
             InvalidateHosting();
@@ -262,6 +263,8 @@ public partial class MainWindowViewModel
 
         ClearGithubConnectionMemory();
         await ForgetStoredGithubAsync(profile.Id);
+        ClearForgejoConnectionMemory();
+        await ForgetStoredForgejoAsync(profile.Id);
         ClearAzureConnectionMemory();
         await ForgetAzureAsync(profile.Id);
         Profiles.Remove(profile);
