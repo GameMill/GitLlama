@@ -482,6 +482,13 @@
                                         Command="{Binding RefreshCommand}"
                                         ToolTip.Tip="Refresh repository (F5)" />
 
+                                <Button x:Name="OpenProjectButton"
+                                        Classes="workspace repository-action"
+                                        Content="Open in Explorer"
+                                        Command="{Binding OpenProjectCommand}"
+                                        IsEnabled="{Binding HasRepository}"
+                                        ToolTip.Tip="Open the repository folder in File Explorer" />
+
                                 <Button Classes="workspace toolbar"
                                         Content="Cancel"
                                         Command="{Binding CancelNetworkCommand}"

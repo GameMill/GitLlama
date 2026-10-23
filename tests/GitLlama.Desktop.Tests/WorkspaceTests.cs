@@ -3755,6 +3755,41 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task OpenProjectButtonOpensTheSelectedRepositoryFolder()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        string? opened = null;
+        vm.ProjectFolderOpener = path =>
+        {
+            opened = path;
+            return Task.CompletedTask;
+        };
+        var template = new DockContentTemplate(vm);
+        Avalonia.Application.Current!.DataTemplates.Add(template);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            var button = window
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button => button.Name == "OpenProjectButton");
+            Assert.Equal("Open Project", button.Content);
+            Assert.True(button.IsEnabled);
+            await vm.OpenProjectCommand.ExecuteAsync(null);
+            Assert.Equal(fixture.RepositoryPath, opened);
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task ForgejoSettingsPersistAndExposeTheIntegrationCard()
     {
         using var fixture = new WorkspaceFixture();
