@@ -1,21 +1,35 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+﻿<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GitLlama.Desktop.Views.HostingView">
     <Grid Margin="10"
           RowDefinitions="Auto,Auto,*,Auto"
           RowSpacing="8">
-        <Grid ColumnDefinitions="*,110,Auto" ColumnSpacing="8">
+        <Grid ColumnDefinitions="*,110,Auto,Auto" ColumnSpacing="8">
             <StackPanel Spacing="3">
-                <TextBlock Text="Pull requests" FontSize="18" FontWeight="SemiBold" IsVisible="{Binding IsPullRequestWorkspace}" />
-                <TextBlock Text="All GitHub remotes in this repository" Classes="muted" IsVisible="{Binding IsPullRequestWorkspace}" />
-                <TextBlock Text="Issues" FontSize="18" FontWeight="SemiBold" IsVisible="{Binding !IsPullRequestWorkspace}" />
+                <TextBlock Text="Pull requests"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           IsVisible="{Binding IsPullRequestWorkspace}" />
+                <TextBlock Text="All GitHub remotes in this repository"
+                           Classes="muted"
+                           IsVisible="{Binding IsPullRequestWorkspace}" />
+                <TextBlock Text="Issues"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           IsVisible="{Binding !IsPullRequestWorkspace}" />
             </StackPanel>
             <ComboBox Grid.Column="1"
                       ItemsSource="{Binding HostingStates}"
                       SelectedItem="{Binding HostingState}" />
 
-            <Button x:Name="RefreshItems"
+            <Button x:Name="NewItem"
                     Grid.Column="2"
+                    Classes="workspace"
+                    Content="New pull request"
+                    Click="NewItem_Click" />
+
+            <Button x:Name="RefreshItems"
+                    Grid.Column="3"
                     Classes="workspace"
                     Content="Refresh"
                     IsEnabled="{Binding !IsHostingBusy}" />
@@ -23,12 +37,17 @@
 
         <Border Grid.Row="1" Classes="card">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Classes="workspace toolbar" Content="Manage integrations"
-                        Command="{Binding OpenSettingsSectionCommand}" CommandParameter="Integrations" />
+                <Button DockPanel.Dock="Right"
+                        Classes="workspace toolbar"
+                        Content="Manage integrations"
+                        Command="{Binding OpenSettingsSectionCommand}"
+                        CommandParameter="Integrations" />
                 <StackPanel Spacing="3">
                     <TextBlock Text="{Binding GithubAccountStatus}" />
                     <TextBlock Text="Connect GitHub in Integrations for private repositories and reviews."
-                               Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                               Classes="muted"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </DockPanel>
         </Border>
@@ -39,8 +58,13 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Spacing="4" Margin="4,5">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                                <TextBlock Text="{Binding}" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding Title}"
+                                           FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding}"
+                                           Classes="muted"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -91,13 +115,17 @@
                     <WrapPanel IsVisible="{Binding IsPullRequestWorkspace}"
                                ItemSpacing="8"
                                LineSpacing="8">
-                        <Button Classes="workspace"
+                        <Button x:Name="ApprovePullRequest"
+                                Classes="workspace"
                                 Content="Approve"
-                                Command="{Binding ApprovePullRequestCommand}" />
+                                Command="{Binding ApprovePullRequestCommand}"
+                                IsEnabled="{Binding !IsHostingBusy}" />
 
-                        <Button Classes="workspace"
+                        <Button x:Name="RequestPullRequestChanges"
+                                Classes="workspace"
                                 Content="Request changes"
-                                Command="{Binding RequestPullRequestChangesCommand}" />
+                                Command="{Binding RequestPullRequestChangesCommand}"
+                                IsEnabled="{Binding !IsHostingBusy}" />
                     </WrapPanel>
 
                     <Expander Header="Merge pull request on GitHub" IsVisible="{Binding IsPullRequestWorkspace}">
@@ -119,13 +147,19 @@
                             Command="{Binding ToggleIssueStateCommand}"
                             IsVisible="{Binding !IsPullRequestWorkspace}" />
 
-                    <Expander Header="Create new item">
+                    <Expander x:Name="CreateItemExpander" Header="Create new item">
                         <StackPanel Spacing="8" Margin="8">
                             <TextBlock Text="Destination for the new item" Classes="muted" />
                             <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
                                 <TextBox Watermark="GitHub owner" Text="{Binding GithubOwner}" />
-                                <TextBox Grid.Column="1" Watermark="Repository" Text="{Binding GithubRepository}" />
+                                <TextBox Grid.Column="1"
+                                         Watermark="Repository"
+                                         Text="{Binding GithubRepository}" />
                             </Grid>
+                            <TextBlock Text="{Binding PullRequestPrefillHint}"
+                                       Classes="muted"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding HasPullRequestPrefillHint}" />
                             <TextBox Text="{Binding HostingDraftTitle}" Watermark="Title" />
 
                             <TextBox Text="{Binding HostingDraftBody}"
@@ -141,6 +175,18 @@
                             <TextBox Text="{Binding PullRequestBase}"
                                      Watermark="Base branch"
                                      IsVisible="{Binding IsPullRequestWorkspace}" />
+
+                            <Button x:Name="CreatePullRequestFromBranch"
+                                    Classes="workspace"
+                                    Content="Push current branch and create pull request"
+                                    Command="{Binding CreatePullRequestFromBranchCommand}"
+                                    IsVisible="{Binding IsPullRequestWorkspace}"
+                                    IsEnabled="{Binding !IsHostingBusy}" />
+
+                            <TextBlock Text="The checked-out branch is pushed to the selected GitHub or Forgejo remote before the pull request is created."
+                                       Classes="muted"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding IsPullRequestWorkspace}" />
 
                             <Button x:Name="CreateItem"
                                     Classes="workspace"

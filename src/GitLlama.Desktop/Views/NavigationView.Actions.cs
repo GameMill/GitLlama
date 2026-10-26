@@ -562,6 +562,16 @@ public partial class NavigationView
         Add("Merge into " + vm.CurrentBranch + "…", () => MergeBranchAsync(branch), branch != vm.CurrentBranch);
         Add("Create branch here…", () => CreateBranchAtAsync(branch));
         Add(
+            "Create pull request…",
+            () =>
+            {
+                vm.PrefillPullRequestFromBranch(branch);
+                (TopLevel.GetTopLevel(this) as MainWindow)?.ShowDocument("Pull Requests");
+                return Task.CompletedTask;
+            },
+            !branch.EndsWith("/HEAD", StringComparison.Ordinal)
+        );
+        Add(
             "Create worktree here…",
             () =>
             {

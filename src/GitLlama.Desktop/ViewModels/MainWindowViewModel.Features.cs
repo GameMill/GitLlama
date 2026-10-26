@@ -26,7 +26,8 @@ public partial class MainWindowViewModel
     [ObservableProperty]
     private GitSubmoduleInfo? selectedSubmodule;
     public ObservableCollection<GitFileInfo> RepositoryFiles { get; } = new BatchObservableCollection<GitFileInfo>();
-    public ObservableCollection<GitFileInfo> FilteredRepositoryFiles { get; } = new BatchObservableCollection<GitFileInfo>();
+    public ObservableCollection<GitFileInfo> FilteredRepositoryFiles { get; } =
+        new BatchObservableCollection<GitFileInfo>();
     public ObservableCollection<GitPatchLine> PatchLines { get; } = [];
     public ObservableCollection<string> HistoryScopes { get; } = ["All branches", "Current branch"];
     public ObservableCollection<HostingItem> PullRequests { get; } = [];
@@ -180,6 +181,16 @@ public partial class MainWindowViewModel
 
     [ObservableProperty]
     private bool isPullRequestWorkspace = true;
+
+    [ObservableProperty]
+    private bool isPullRequestFormExpanded;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasPullRequestPrefillHint))]
+    private string pullRequestPrefillHint = "";
+
+    public bool HasPullRequestPrefillHint => !string.IsNullOrWhiteSpace(PullRequestPrefillHint);
+
     public IReadOnlyList<string> HostingStates { get; } = ["open", "closed", "all"];
     public string HistoryReference =>
         SelectedHistoryScope == "All branches" ? ""
@@ -218,6 +229,8 @@ public partial class MainWindowViewModel
         SelectedPullRequest = SelectedIssue = null;
         HostingDetails = "Select a pull request or issue.";
         HostingStatus = "Choose a GitHub or Forgejo repository and refresh to load items.";
+        IsPullRequestFormExpanded = false;
+        PullRequestPrefillHint = "";
         GithubOwner = GithubRepository = "";
         _hostingProviderKind = HostingProviders.GitHub;
         _pullPage = _issuePage = 1;
@@ -242,16 +255,13 @@ public partial class MainWindowViewModel
             GithubOwner = GithubRepository = "";
             InvalidateHosting(clearPulls: false);
             if (RemotePullRequestRepositories().Length == 0)
-                HostingStatus = "Azure pull requests and Boards are not connected yet. Use Integrations for Azure repository access.";
+                HostingStatus =
+                    "Azure pull requests and Boards are not connected yet. Use Integrations for Azure repository access.";
         }
 
         if (
             repository is not null
-            && (
-                GithubOwner != repository.Owner
-                || GithubRepository != repository.Name
-                || providerChanged
-            )
+            && (GithubOwner != repository.Owner || GithubRepository != repository.Name || providerChanged)
         )
         {
             if (providerChanged)
@@ -262,11 +272,13 @@ public partial class MainWindowViewModel
             {
                 Interlocked.Increment(ref _hostingRevision);
                 Issues.Clear();
-                if (!IsPullRequestWorkspace) HostingComments.Clear();
+                if (!IsPullRequestWorkspace)
+                    HostingComments.Clear();
                 SelectedIssue = null;
                 HasMoreIssues = false;
                 _pullPage = _issuePage = 1;
-                if (!IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
+                if (!IsPullRequestWorkspace)
+                    HostingDetails = "Select a pull request or issue.";
             }
 
             GithubOwner = repository.Owner;
@@ -282,7 +294,9 @@ public partial class MainWindowViewModel
         new()
         {
             AzurePersonalAccessToken = AzurePatFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
-            AzureOAuthTokenProvider = AzureOAuthProviderFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
+            AzureOAuthTokenProvider = AzureOAuthProviderFor(
+                remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")
+            ),
             AllowedAzureOrganizations = AzureOrganizations.Select(org => org.Name).ToArray(),
             AzureCredentialScopeUrl = AzureScopeFor(remoteUrl ?? (cloning ? CloneUrl : SelectedRemote?.Url ?? "")),
             Username =
@@ -346,7 +360,10 @@ public partial class MainWindowViewModel
                 using var repo = new LibGit2Sharp.Repository(repository.Path);
                 CommitMessage = repo.Head.Tip?.Message ?? "";
             }
-            catch (Exception error) { Status = PresentError(error); }
+            catch (Exception error)
+            {
+                Status = PresentError(error);
+            }
         }
         OnPropertyChanged(nameof(CommitButtonText));
         OnPropertyChanged(nameof(CanCommit));
@@ -507,7 +524,9 @@ public partial class MainWindowViewModel
     {
         var message = e.Message;
         foreach (
-            var secret in new[] { NetworkSecret, GithubToken, ForgejoToken, AzurePatInput }.Concat(_azurePersonalAccessTokens.Values)
+            var secret in new[] { NetworkSecret, GithubToken, ForgejoToken, AzurePatInput }.Concat(
+                _azurePersonalAccessTokens.Values
+            )
         )
         {
             if (!string.IsNullOrEmpty(secret))
@@ -704,8 +723,11 @@ public partial class MainWindowViewModel
 
     private void FilterRepositoryFiles()
     {
-        CollectionUpdates.Sync(FilteredRepositoryFiles,
-            RepositoryFiles.Where(f => f.Path.Contains(FileSearch, StringComparison.OrdinalIgnoreCase)), file => file.Path);
+        CollectionUpdates.Sync(
+            FilteredRepositoryFiles,
+            RepositoryFiles.Where(f => f.Path.Contains(FileSearch, StringComparison.OrdinalIgnoreCase)),
+            file => file.Path
+        );
     }
 
     partial void OnSelectedRepositoryFileChanged(GitFileInfo? value) => _ = PreviewRepositoryFileAsync(value);
@@ -852,7 +874,11 @@ public partial class MainWindowViewModel
     }
 
     private async Task RefreshFeatureListsAsync(
-        string path, long version, long refreshVersion, IReadOnlyList<ChangedFile> changes)
+        string path,
+        long version,
+        long refreshVersion,
+        IReadOnlyList<ChangedFile> changes
+    )
     {
         var worktrees = await _worktrees.ListAsync(path);
         var reflog = await new GitReflogService().ListAsync(path);

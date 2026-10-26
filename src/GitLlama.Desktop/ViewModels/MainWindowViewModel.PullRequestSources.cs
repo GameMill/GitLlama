@@ -8,20 +8,36 @@ public partial class MainWindowViewModel
 {
     private long _pullRequestRevision;
     private string _pullRequestSourceKey = "";
-    [ObservableProperty] private bool isPullRequestLoading;
 
-    private HostingRepository[] RemotePullRequestRepositories() => Remotes.Select(remote => HostingProviderResolver.FromRemote(remote.Url))
-        .OfType<HostingRepository>().DistinctBy(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase)
-        .OrderBy(repo => repo.Provider, StringComparer.OrdinalIgnoreCase)
-        .ThenBy(repo => repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    [ObservableProperty]
+    private bool isPullRequestLoading;
 
-    public string PullRequestRemoteSignature => string.Join("|", RemotePullRequestRepositories()
-        .Select(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name));
+    private HostingRepository[] RemotePullRequestRepositories() =>
+        Remotes
+            .Select(remote => HostingProviderResolver.FromRemote(remote.Url))
+            .OfType<HostingRepository>()
+            .DistinctBy(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(repo => repo.Provider, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(repo => repo.Owner + "/" + repo.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static bool SamePullRequest(HostingItem left, HostingItem right) =>
+        left.Number == right.Number
+        && string.Equals(left.Repository?.Provider, right.Repository?.Provider, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(left.Repository?.Owner, right.Repository?.Owner, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(left.Repository?.Name, right.Repository?.Name, StringComparison.OrdinalIgnoreCase);
+
+    public string PullRequestRemoteSignature =>
+        string.Join(
+            "|",
+            RemotePullRequestRepositories().Select(repo => repo.Provider + ":" + repo.Owner + "/" + repo.Name)
+        );
 
     private void UpdatePullRequestSources()
     {
         var key = PullRequestRemoteSignature;
-        if (key.Equals(_pullRequestSourceKey, StringComparison.OrdinalIgnoreCase)) return;
+        if (key.Equals(_pullRequestSourceKey, StringComparison.OrdinalIgnoreCase))
+            return;
         _pullRequestSourceKey = key;
         Interlocked.Increment(ref _pullRequestRevision);
         PullRequests.Clear();
@@ -32,7 +48,8 @@ public partial class MainWindowViewModel
 
     private async Task LoadAllPullRequestsAsync(CancellationToken ct = default)
     {
-        if (IsHostingBusy) return;
+        if (IsHostingBusy)
+            return;
         var targets = RemotePullRequestRepositories();
         if (targets.Length == 0)
         {
@@ -46,7 +63,8 @@ public partial class MainWindowViewModel
         var version = Interlocked.Read(ref _repositorySelectionVersion);
         var sourceKey = PullRequestRemoteSignature;
         var state = HostingState;
-        bool Current() => revision == Interlocked.Read(ref _pullRequestRevision)
+        bool Current() =>
+            revision == Interlocked.Read(ref _pullRequestRevision)
             && version == Interlocked.Read(ref _repositorySelectionVersion)
             && sourceKey.Equals(PullRequestRemoteSignature, StringComparison.OrdinalIgnoreCase);
         IsHostingBusy = IsPullRequestLoading = true;
@@ -55,7 +73,9 @@ public partial class MainWindowViewModel
         try
         {
             var githubToken = targets.Any(target => target.Provider == HostingProviders.GitHub) ? GithubToken : "";
-            var login = _githubConnection?.Login ?? (githubToken.Length > 0 ? await _hostingProvider.AuthenticatedUserAsync(githubToken, ct) : "");
+            var login =
+                _githubConnection?.Login
+                ?? (githubToken.Length > 0 ? await _hostingProvider.AuthenticatedUserAsync(githubToken, ct) : "");
             var forgejoLogin = "";
             if (targets.Any(target => target.Provider == HostingProviders.Forgejo) && ForgejoUsableToken.Length > 0)
             {
@@ -63,7 +83,10 @@ public partial class MainWindowViewModel
                 {
                     forgejoLogin = await ForgejoProviderInstance().AuthenticatedUserAsync(ForgejoUsableToken, ct);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
                 catch { }
             }
 
@@ -78,31 +101,53 @@ public partial class MainWindowViewModel
                     for (var page = 1; ; page++)
                     {
                         ct.ThrowIfCancellationRequested();
-                        if (!Current()) return;
+                        if (!Current())
+                            return;
                         HostingStatus = $"Loading {target.Owner}/{target.Name} · page {page}…";
                         var result = await provider.ListAsync(target, true, state, page, token, ct);
-                        if (!Current()) return;
+                        if (!Current())
+                            return;
                         var added = 0;
                         foreach (var item in result.Items)
-                            if (found.TryAdd(item.Number, item with { Repository = target })) added++;
-                        if (!result.HasMore) break;
-                        if (added == 0) throw new InvalidOperationException($"{providerName} repeated a page. Refresh to retry the complete list.");
+                            if (found.TryAdd(item.Number, item with { Repository = target }))
+                                added++;
+                        if (!result.HasMore)
+                            break;
+                        if (added == 0)
+                            throw new InvalidOperationException(
+                                $"{providerName} repeated a page. Refresh to retry the complete list."
+                            );
                     }
                     collected.AddRange(found.Values);
                 }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-                catch (Exception error) { failures.Add($"{target.Owner}/{target.Name}: {SafeMessage(error)}"); }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception error)
+                {
+                    failures.Add($"{target.Owner}/{target.Name}: {SafeMessage(error)}");
+                }
             }
-            if (!Current()) return;
+            if (!Current())
+                return;
+            var selected = SelectedPullRequest;
             _updatingPullRequests = true;
             PullRequests.Clear();
-            foreach (var item in collected) PullRequests.Add(item);
+            foreach (var item in collected)
+                PullRequests.Add(item);
             _updatingPullRequests = false;
+            var restored = selected is null
+                ? null
+                : PullRequests.FirstOrDefault(item => SamePullRequest(item, selected));
+            if (!ReferenceEquals(SelectedPullRequest, restored))
+                SelectedPullRequest = restored;
             _pullRequestLogin = login;
             _forgejoLogin = forgejoLogin;
             HasMorePullRequests = failures.Count > 0;
             RebuildPullRequestTree();
-            HostingStatus = $"{PullRequests.Count} pull requests from {targets.Length - failures.Count} repositories loaded.";
+            HostingStatus =
+                $"{PullRequests.Count} pull requests from {targets.Length - failures.Count} repositories loaded.";
             if (failures.Count > 0)
             {
                 var message = "Some pull requests could not be loaded. " + string.Join("; ", failures);
@@ -111,11 +156,13 @@ public partial class MainWindowViewModel
         }
         catch (OperationCanceledException)
         {
-            if (Current()) HostingStatus = "Pull request refresh canceled or timed out. The previous list was kept.";
+            if (Current())
+                HostingStatus = "Pull request refresh canceled or timed out. The previous list was kept.";
         }
         catch (Exception error)
         {
-            if (Current()) HostingStatus = "Could not load pull requests: " + PresentError(error);
+            if (Current())
+                HostingStatus = "Could not load pull requests: " + PresentError(error);
         }
         finally
         {

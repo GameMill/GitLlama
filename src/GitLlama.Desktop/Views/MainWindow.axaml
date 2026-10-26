@@ -484,7 +484,7 @@
 
                                 <Button x:Name="OpenProjectButton"
                                         Classes="workspace repository-action"
-                                        Content="Open in Explorer"
+                                        Content="Open Project"
                                         Command="{Binding OpenProjectCommand}"
                                         IsEnabled="{Binding HasRepository}"
                                         ToolTip.Tip="Open the repository folder in File Explorer" />

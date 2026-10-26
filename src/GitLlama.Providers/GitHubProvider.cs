@@ -327,6 +327,7 @@ public sealed partial class GitHubProvider : IHostingProvider, IDisposable
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!response.IsSuccessStatusCode)
         {
+            var detail = await ErrorDetailAsync(response, ct);
             var message = response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => "GitHub authentication failed. Check the token.",
@@ -337,11 +338,70 @@ public sealed partial class GitHubProvider : IHostingProvider, IDisposable
                     "GitHub rejected the change. Check branch names, permissions and repository rules.",
                 _ => $"GitHub request failed (HTTP {(int)response.StatusCode}).",
             };
+            if (
+                detail.Length > 0
+                && response.StatusCode
+                    is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            )
+            {
+                message += " " + detail;
+            }
+
             throw new InvalidOperationException(message);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         return await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+    }
+
+    private static async Task<string> ErrorDetailAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var text = await response.Content.ReadAsStringAsync(ct);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "";
+            }
+
+            using var json = JsonDocument.Parse(text);
+            if (json.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return "";
+            }
+
+            var details = new List<string>();
+            if (
+                json.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(message.GetString())
+            )
+            {
+                details.Add(message.GetString()!);
+            }
+
+            if (json.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var error in errors.EnumerateArray())
+                {
+                    if (
+                        error.ValueKind == JsonValueKind.Object
+                        && error.TryGetProperty("message", out var item)
+                        && item.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(item.GetString())
+                    )
+                    {
+                        details.Add(item.GetString()!);
+                    }
+                }
+            }
+
+            return string.Join(" ", details.Distinct(StringComparer.Ordinal));
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private static HostingItem Item(JsonElement item, bool pull)
@@ -364,7 +424,7 @@ public sealed partial class GitHubProvider : IHostingProvider, IDisposable
             Assignees = Logins(item, "assignees"),
             RequestedReviewers = Logins(item, "requested_reviewers"),
             IsDraft = item.TryGetProperty("draft", out var draft) && draft.ValueKind == JsonValueKind.True,
-            IsMerged = item.TryGetProperty("merged_at", out var merged) && merged.ValueKind == JsonValueKind.String
+            IsMerged = item.TryGetProperty("merged_at", out var merged) && merged.ValueKind == JsonValueKind.String,
         };
     }
 

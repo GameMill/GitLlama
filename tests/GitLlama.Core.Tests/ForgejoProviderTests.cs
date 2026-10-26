@@ -29,10 +29,7 @@ public sealed class ForgejoProviderTests
     public void ForgejoRemoteResolutionSupportsABasePath()
     {
         var baseUri = new Uri("https://forgejo.local/forgejo/");
-        var repository = ForgejoProvider.FromRemote(
-            "https://forgejo.local/forgejo/owner/client.git",
-            baseUri
-        );
+        var repository = ForgejoProvider.FromRemote("https://forgejo.local/forgejo/owner/client.git", baseUri);
         Assert.NotNull(repository);
         Assert.Equal(new HostingRepository("owner", "client") { Provider = HostingProviders.Forgejo }, repository);
         Assert.NotNull(ForgejoProvider.FromRemote("git@forgejo.local:owner/client.git", baseUri));
@@ -135,6 +132,26 @@ public sealed class ForgejoProviderTests
         Assert.Equal("APPROVED", payload.RootElement.GetProperty("event").GetString());
         Assert.Equal("abc123", payload.RootElement.GetProperty("commit_id").GetString());
         Assert.Equal(HttpMethod.Post, handler.LastMethod);
+    }
+
+    [Fact]
+    public async Task ReviewErrorsIncludeTheForgejoReason()
+    {
+        using var handler = new Handler();
+        handler.Enqueue(
+            """
+            {"message":"approve your own pull is not allowed","url":"http://forgejo.local:3000/api/swagger"}
+            """,
+            HttpStatusCode.UnprocessableEntity
+        );
+        using var client = new HttpClient(handler);
+        using var provider = new ForgejoProvider(client, BaseUri);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            provider.ReviewAsync(new("owner", "client"), 7, "abc123", "APPROVE", "", "secret-token")
+        );
+
+        Assert.Contains("approve your own pull is not allowed", error.Message);
     }
 
     [Fact]
@@ -245,10 +262,7 @@ public sealed class ForgejoProviderTests
         public void Enqueue(string body, HttpStatusCode status = HttpStatusCode.OK) =>
             _responses.Enqueue((body, status));
 
-        protected override async Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken ct
-        )
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
             LastAuthorization = request.Headers.Authorization?.ToString();
@@ -257,12 +271,8 @@ public sealed class ForgejoProviderTests
             LastBody = body;
             Requests.Add((request.Method, request.RequestUri!, body));
 
-            var (responseBody, status) =
-                _responses.Count > 0 ? _responses.Dequeue() : ("[]", HttpStatusCode.OK);
-            return new(status)
-            {
-                Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
-            };
+            var (responseBody, status) = _responses.Count > 0 ? _responses.Dequeue() : ("[]", HttpStatusCode.OK);
+            return new(status) { Content = new StringContent(responseBody, Encoding.UTF8, "application/json") };
         }
     }
 }

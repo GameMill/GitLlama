@@ -43,16 +43,28 @@ public sealed class WorkspaceTests
         public bool Reject { get; set; }
         public bool BackgroundCallback { get; set; }
         public TaskCompletionSource? ContinueSignIn { get; set; }
-        public async Task<GitLlama.Providers.AzureOAuthIdentity> SignInAsync(Func<GitLlama.Providers.AzureDeviceCode, Task> showCode, CancellationToken ct)
+
+        public async Task<GitLlama.Providers.AzureOAuthIdentity> SignInAsync(
+            Func<GitLlama.Providers.AzureDeviceCode, Task> showCode,
+            CancellationToken ct
+        )
         {
-            var code = new GitLlama.Providers.AzureDeviceCode("TEST-CODE", new Uri("https://microsoft.com/devicelogin"));
-            if (BackgroundCallback) await Task.Run(() => showCode(code), ct);
-            else await showCode(code);
-            if (ContinueSignIn is not null) await ContinueSignIn.Task.WaitAsync(ct);
+            var code = new GitLlama.Providers.AzureDeviceCode(
+                "TEST-CODE",
+                new Uri("https://microsoft.com/devicelogin")
+            );
+            if (BackgroundCallback)
+                await Task.Run(() => showCode(code), ct);
+            else
+                await showCode(code);
+            if (ContinueSignIn is not null)
+                await ContinueSignIn.Task.WaitAsync(ct);
             ct.ThrowIfCancellationRequested();
-            if (Reject) throw new InvalidOperationException("Test sign-in rejected.");
+            if (Reject)
+                throw new InvalidOperationException("Test sign-in rejected.");
             return new("account-in-tenant", "test@example.invalid");
         }
+
         public Task<string> AccessTokenAsync(string accountId, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -60,6 +72,7 @@ public sealed class WorkspaceTests
             Assert.Equal("account-in-tenant", accountId);
             return Task.FromResult("oauth-access-secret");
         }
+
         public byte[] ExportCache() => System.Text.Encoding.UTF8.GetBytes("cache-with-refresh-secret");
     }
 
@@ -74,18 +87,25 @@ public sealed class WorkspaceTests
         vm.AzureOrganizationLoader = (token, _) =>
         {
             Assert.Equal("oauth-access-secret", token);
-            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([new("oauth-team"), new("other-team")]);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([
+                new("oauth-team"),
+                new("other-team"),
+            ]);
         };
         vm.AzureRepositoryLoader = (org, token, _) =>
         {
             Assert.Equal("pat-secret", token);
-            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([new("pat", "repo", "project", "https://dev.azure.com/pat-team/project/_git/repo", "")]);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([
+                new("pat", "repo", "project", "https://dev.azure.com/pat-team/project/_git/repo", ""),
+            ]);
         };
         vm.AzureOAuthRepositoryLoader = (org, token, _) =>
         {
             Assert.Equal("oauth-team", org);
             Assert.Equal("oauth-access-secret", token);
-            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([new("oauth", "repo", "project", "https://dev.azure.com/oauth-team/project/_git/repo", "")]);
+            return Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([
+                new("oauth", "repo", "project", "https://dev.azure.com/oauth-team/project/_git/repo", ""),
+            ]);
         };
         vm.OpenIntegrationBrowser = uri =>
         {
@@ -105,20 +125,30 @@ public sealed class WorkspaceTests
         Assert.Equal(2, vm.AzureOAuthOrganizations.Count);
         var url = "https://dev.azure.com/oauth-team/project/_git/repo";
         Assert.Throws<InvalidOperationException>(() => vm.NetworkOptions(0, remoteUrl: url).EnsureAzureAccess(url));
-        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(
+            vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team")
+        );
         Assert.Equal(2, vm.AzureOrganizations.Count);
         var options = vm.NetworkOptions(0, remoteUrl: url);
         Assert.True(options.UsesAzureAuthorization(url));
         Assert.Empty(options.AzurePersonalAccessToken);
         Assert.Equal("oauth-access-secret", await options.AzureOAuthTokenProvider!(CancellationToken.None));
-        Assert.Null(vm.NetworkOptions(0, remoteUrl: "git@ssh.dev.azure.com:v3/oauth-team/project/repo").AzureOAuthTokenProvider);
+        Assert.Null(
+            vm.NetworkOptions(0, remoteUrl: "git@ssh.dev.azure.com:v3/oauth-team/project/repo").AzureOAuthTokenProvider
+        );
         await vm.RefreshCloneableRepositoriesCommand.ExecuteAsync(null);
         Assert.Equal(2, vm.CloneableRepositories.Count);
         Assert.Contains(vm.CloneableRepositories, repo => repo.CloneUrl == url);
-        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
-        await Assert.ThrowsAsync<OperationCanceledException>(() => options.AzureOAuthTokenProvider!(CancellationToken.None));
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(
+            vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team")
+        );
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            options.AzureOAuthTokenProvider!(CancellationToken.None)
+        );
         Assert.Equal("pat-team", Assert.Single(vm.AzureOrganizations).Name);
-        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team"));
+        await vm.ToggleAzureOAuthOrganizationCommand.ExecuteAsync(
+            vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team")
+        );
 
         if (OperatingSystem.IsWindows())
         {
@@ -131,7 +161,9 @@ public sealed class WorkspaceTests
             Assert.True(vm.IsAzureOAuthConnected);
             Assert.Equal(2, vm.AzureOrganizations.Count);
             Assert.True(vm.AzureOAuthOrganizations.Single(org => org.Name == "oauth-team").IsAllowed);
-            var encrypted = await File.ReadAllBytesAsync(Directory.GetFiles(Path.Combine(fixture.SettingsPath, "connections"), "azure-*.dat").Single());
+            var encrypted = await File.ReadAllBytesAsync(
+                Directory.GetFiles(Path.Combine(fixture.SettingsPath, "connections"), "azure-*.dat").Single()
+            );
             Assert.DoesNotContain("cache-with-refresh-secret", System.Text.Encoding.UTF8.GetString(encrypted));
             Assert.DoesNotContain("pat-secret", File.ReadAllText(Path.Combine(fixture.SettingsPath, "settings.json")));
         }
@@ -148,15 +180,24 @@ public sealed class WorkspaceTests
             Assert.False(settings.FindControl<Button>("AzureSignInButton")!.IsVisible);
             Assert.NotNull(settings.FindControl<Button>("AzurePatConnectButton"));
             Assert.Null(settings.FindControl<TextBox>("AzureOAuthTenantInput"));
-            Assert.DoesNotContain(settings.GetVisualDescendants().OfType<TextBlock>(), block => block.Text is "Directory (tenant) ID" or "Application (client) ID");
+            Assert.DoesNotContain(
+                settings.GetVisualDescendants().OfType<TextBlock>(),
+                block => block.Text is "Directory (tenant) ID" or "Application (client) ID"
+            );
             settings.FindControl<Expander>("AzureIntegrationExpander")!.BringIntoView();
             SavePreview(window, "azure-oauth-and-pat.png");
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
         await vm.DisconnectAzureOAuthCommand.ExecuteAsync(null);
         Assert.False(vm.IsAzureOAuthConnected);
         Assert.Equal("pat-team", Assert.Single(vm.AzureOrganizations).Name);
-        Assert.Equal("pat-secret", vm.NetworkOptions(0, remoteUrl: "https://dev.azure.com/pat-team/project/_git/repo").AzurePersonalAccessToken);
+        Assert.Equal(
+            "pat-secret",
+            vm.NetworkOptions(0, remoteUrl: "https://dev.azure.com/pat-team/project/_git/repo").AzurePersonalAccessToken
+        );
     }
 
     [AvaloniaFact]
@@ -167,7 +208,8 @@ public sealed class WorkspaceTests
         vm.AutoRefresh = false;
         var oauth = new FakeAzureOAuth();
         vm.AzureOAuthFactory = (_, _, _) => oauth;
-        vm.AzureOrganizationLoader = (_, _) => Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([]);
+        vm.AzureOrganizationLoader = (_, _) =>
+            Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureDiscoveredOrganization>>([]);
         vm.AzureRepositoryLoader = (_, _, _) => Task.FromResult<IReadOnlyList<GitLlama.Providers.AzureRepository>>([]);
         vm.AzureOrganizationInput = "pat-team";
         vm.AzurePatInput = "pat-secret";
@@ -183,7 +225,11 @@ public sealed class WorkspaceTests
         Assert.False(vm.IsAuthenticationBusy);
         Assert.False(vm.HasAzureOAuthCode);
         oauth.Reject = false;
-        vm.OpenIntegrationBrowser = _ => { vm.CancelAuthenticationCommand.Execute(null); return Task.FromResult(true); };
+        vm.OpenIntegrationBrowser = _ =>
+        {
+            vm.CancelAuthenticationCommand.Execute(null);
+            return Task.FromResult(true);
+        };
         await vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
         Assert.True(vm.IsAzureOAuthConnected);
         Assert.Single(vm.AzureOrganizations);
@@ -198,11 +244,12 @@ public sealed class WorkspaceTests
         using var fixture = new WorkspaceFixture();
         var vm = await fixture.OpenAsync();
         vm.AutoRefresh = false;
-        vm.AzureOAuthFactory = (_, _, _) => new FakeAzureOAuth
-        {
-            BackgroundCallback = true,
-            ContinueSignIn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)
-        };
+        vm.AzureOAuthFactory = (_, _, _) =>
+            new FakeAzureOAuth
+            {
+                BackgroundCallback = true,
+                ContinueSignIn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously),
+            };
         var launches = 0;
         vm.OpenIntegrationBrowser = uri =>
         {
@@ -212,7 +259,9 @@ public sealed class WorkspaceTests
             return throws ? throw new IOException("Browser unavailable") : Task.FromResult(false);
         };
         var signIn = vm.ConnectAzureOAuthCommand.ExecuteAsync(null);
-        await WaitUntilAsync(() => vm.HasAzureOAuthCode && vm.AzureOAuthFeedback.Contains("https://microsoft.com/devicelogin"));
+        await WaitUntilAsync(() =>
+            vm.HasAzureOAuthCode && vm.AzureOAuthFeedback.Contains("https://microsoft.com/devicelogin")
+        );
         Assert.Equal("TEST-CODE", vm.AzureOAuthUserCode);
         Assert.True(vm.IsAuthenticationBusy);
         Assert.False(signIn.IsCompleted);
@@ -234,7 +283,12 @@ public sealed class WorkspaceTests
         vm.AutoRefresh = false;
         vm.IsWorkingTreeInspector = true;
         var view = new InspectorView { DataContext = vm };
-        var window = new Window { Content = view, Width = 500, Height = 850 };
+        var window = new Window
+        {
+            Content = view,
+            Width = 500,
+            Height = 850,
+        };
         try
         {
             window.Show();
@@ -254,14 +308,20 @@ public sealed class WorkspaceTests
             button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() => window.OwnedWindows.Any());
             var dialog = window.OwnedWindows.Single();
-            dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Cancel"))
+            dialog
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(b => Equals(b.Content, "Cancel"))
                 .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() => !dialog.IsVisible);
             Assert.NotEmpty(vm.WorkingFiles);
             button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() => window.OwnedWindows.Any());
             dialog = window.OwnedWindows.Single();
-            var confirm = dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Discard all changes"));
+            var confirm = dialog
+                .GetVisualDescendants()
+                .OfType<Button>()
+                .Single(b => Equals(b.Content, "Discard all changes"));
             Assert.False(confirm.IsDefault);
             confirm.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() => !vm.IsFeatureBusy && vm.WorkingFiles.Count == 0);
@@ -269,7 +329,10 @@ public sealed class WorkspaceTests
             Assert.Equal("Discarded all changes.", vm.Status);
             Assert.Empty(vm.ErrorNotifications);
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaTheory]
@@ -293,9 +356,11 @@ public sealed class WorkspaceTests
             var right = (Dock.Model.Core.IDock)inspector.Owner!;
             var group = groupOnLeft ? left : right;
             control.Factory!.MoveDockable(
-                groupOnLeft ? right : left, group,
+                groupOnLeft ? right : left,
+                group,
                 groupOnLeft ? inspector : repository,
-                groupOnLeft ? repository : inspector);
+                groupOnLeft ? repository : inspector
+            );
             group.ActiveDockable = repository;
 
             window.ShowDocument("Changes");
@@ -316,7 +381,10 @@ public sealed class WorkspaceTests
             Assert.Same(group, inspector.Owner);
             Assert.Equal(2, group.VisibleDockables!.Count);
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -344,13 +412,18 @@ public sealed class WorkspaceTests
             var notifications = window.FindControl<ErrorNotificationsView>("ErrorNotifications")!;
             Assert.True(notifications.IsVisible);
             SavePreview(window, "visible-error-cards.png");
-            var dismiss = notifications.GetVisualDescendants().OfType<Button>()
+            var dismiss = notifications
+                .GetVisualDescendants()
+                .OfType<Button>()
                 .Single(button => ReferenceEquals(button.Command, vm.DismissErrorCommand));
             dismiss.Command!.Execute(dismiss.CommandParameter);
             Assert.Empty(vm.ErrorNotifications);
             Assert.False(notifications.IsVisible);
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -359,7 +432,9 @@ public sealed class WorkspaceTests
         using var fixture = new WorkspaceFixture();
         var vm = await fixture.OpenAsync();
         vm.NetworkSecret = "private-test-credential";
-        vm.PresentError(new IOException("Cannot connect: private-test-credential https://user:password@example.com/repo"));
+        vm.PresentError(
+            new IOException("Cannot connect: private-test-credential https://user:password@example.com/repo")
+        );
         var error = Assert.Single(vm.ErrorNotifications);
         Assert.DoesNotContain("private-test-credential", error.Message);
         Assert.DoesNotContain("user:password", error.Message);
@@ -380,7 +455,10 @@ public sealed class WorkspaceTests
         var originalTab = vm.SelectedRepositoryWorkspaceTab;
         var originalHistory = vm.HistoryRows.ToArray();
         var count = vm.RepositoryWorkspaceTabs.Count;
-        var missing = new RepositoryInfo(Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing"), "Missing");
+        var missing = new RepositoryInfo(
+            Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing"),
+            "Missing"
+        );
         vm.OpenRepositoryTab(missing);
         Assert.Same(originalRepository, vm.SelectedRepository);
         Assert.Same(originalTab, vm.SelectedRepositoryWorkspaceTab);
@@ -411,17 +489,30 @@ public sealed class WorkspaceTests
             vm.DismissRepositoryOpenErrorCommand.Execute(null);
             Assert.False(window.FindControl<Border>("RepositoryOpenErrorBanner")!.IsVisible);
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
     public async Task StartupDoesNotOpenMissingSavedRepositoryTabs()
     {
         using var fixture = new WorkspaceFixture();
-        var missing = new RepositoryInfo(Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing-startup"), "Missing");
+        var missing = new RepositoryInfo(
+            Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "missing-startup"),
+            "Missing"
+        );
         var store = new JsonSettingsStore(fixture.SettingsPath);
-        await store.SaveAsync(new GitLlamaSettings([missing], missing.Path,
-            OpenRepositoryPaths: [missing.Path], AutoRefresh: false, LoadAvatars: false));
+        await store.SaveAsync(
+            new GitLlamaSettings(
+                [missing],
+                missing.Path,
+                OpenRepositoryPaths: [missing.Path],
+                AutoRefresh: false,
+                LoadAvatars: false
+            )
+        );
         using var sessions = new RepositorySessionManager(new LibGitRepositoryReader(), new LibGitOverviewReader());
         using var vm = new MainWindowViewModel(sessions, store, new GitWorkingTreeService());
         await vm.Initialization;
@@ -441,9 +532,14 @@ public sealed class WorkspaceTests
         var reader = new PausedStartupReader(fail);
         using var sessions = new RepositorySessionManager(reader, new LibGitOverviewReader());
         var store = new JsonSettingsStore(fixture.SettingsPath);
-        await store.SaveAsync(new GitLlamaSettings(
-            [new RepositoryInfo(fixture.RepositoryPath, "StoneForge")], fixture.RepositoryPath,
-            AutoRefresh: true, LoadAvatars: false));
+        await store.SaveAsync(
+            new GitLlamaSettings(
+                [new RepositoryInfo(fixture.RepositoryPath, "StoneForge")],
+                fixture.RepositoryPath,
+                AutoRefresh: true,
+                LoadAvatars: false
+            )
+        );
         using var vm = new MainWindowViewModel(sessions, store, new GitWorkingTreeService());
         var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
         try
@@ -484,7 +580,9 @@ public sealed class WorkspaceTests
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Entered { get; private set; }
         public int Reads { get; private set; }
+
         public bool IsRepository(string path) => Repository.IsValid(path);
+
         public async Task<RepositorySnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
         {
             Entered = true;
@@ -550,7 +648,8 @@ public sealed class WorkspaceTests
         using var fixture = new WorkspaceFixture();
         var vm = await fixture.OpenAsync();
         vm.AutoRefresh = false;
-        var rows = Enumerable.Range(0, 5000)
+        var rows = Enumerable
+            .Range(0, 5000)
             .Select(i => new WorkingFileRow("ModifiedInWorkdir  " + i, $"src/File{i:D5}.cs", "ModifiedInWorkdir"))
             .ToArray();
         var updates = 0;
@@ -558,7 +657,9 @@ public sealed class WorkspaceTests
         var elapsed = System.Diagnostics.Stopwatch.StartNew();
         CollectionUpdates.Sync(vm.WorkingFiles, rows, row => row.Path);
         elapsed.Stop();
-        Console.WriteLine($"5,000 working rows: {elapsed.Elapsed.TotalMilliseconds:F0} ms; unstaged list notifications: {updates}");
+        Console.WriteLine(
+            $"5,000 working rows: {elapsed.Elapsed.TotalMilliseconds:F0} ms; unstaged list notifications: {updates}"
+        );
         Assert.Equal(5000, vm.UnstagedFiles.Count);
         Assert.Equal(1, updates);
         updates = 0;
@@ -598,15 +699,22 @@ public sealed class WorkspaceTests
         var elapsed = System.Diagnostics.Stopwatch.StartNew();
         await vm.CheckoutBranchCommand.ExecuteAsync(null);
         elapsed.Stop();
-        Console.WriteLine($"Checkout and full refresh with 5,000 files (committed={committed}): {elapsed.Elapsed.TotalMilliseconds:F0} ms");
+        Console.WriteLine(
+            $"Checkout and full refresh with 5,000 files (committed={committed}): {elapsed.Elapsed.TotalMilliseconds:F0} ms"
+        );
         Assert.Equal("large-checkout", vm.CurrentBranch);
-        Assert.Equal(committed ? 0 : 5000, vm.UnstagedFiles.Count(file => file.Path.StartsWith("checkout-local-files/")));
+        Assert.Equal(
+            committed ? 0 : 5000,
+            vm.UnstagedFiles.Count(file => file.Path.StartsWith("checkout-local-files/"))
+        );
         Assert.Equal(5000, vm.RepositoryFiles.Count(file => file.Path.StartsWith("checkout-local-files/")));
         Assert.Equal("preserve local work", File.ReadAllText(Path.Combine(folder, "File04999.txt")));
         var overview = await new LibGitOverviewReader().ReadOverviewAsync(fixture.RepositoryPath);
         var browser = new GitFileBrowserService();
-        Assert.Equal(await browser.ListAsync(fixture.RepositoryPath),
-            await browser.ListAsync(fixture.RepositoryPath, overview.Changes));
+        Assert.Equal(
+            await browser.ListAsync(fixture.RepositoryPath),
+            await browser.ListAsync(fixture.RepositoryPath, overview.Changes)
+        );
     }
 
     [AvaloniaFact]
@@ -1224,7 +1332,8 @@ public sealed class WorkspaceTests
     public async Task HostingCommandsHandleReviewMergeIssuesAndOfflineState()
     {
         using var fixture = new WorkspaceFixture();
-        using (var repo = new Repository(fixture.RepositoryPath)) repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
         var provider = new FakeHostingProvider();
         var vm = await fixture.OpenAsync(provider);
         await WaitUntilAsync(() => vm.Remotes.Count == 1);
@@ -1254,12 +1363,234 @@ public sealed class WorkspaceTests
     }
 
     [AvaloniaFact]
+    public async Task PullRequestWorkspaceApproveButtonReviewsTheSelectedPullRequest()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var provider = new FakeHostingProvider();
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        vm.GithubOwner = "owner";
+        vm.GithubRepository = "repo";
+        vm.GithubToken = "session-token";
+        vm.HostingState = "open";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        Assert.Single(vm.PullRequests);
+
+        var template = new DockContentTemplate(vm);
+        Avalonia.Application.Current!.DataTemplates.Add(template);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            window.ShowDocument("Pull Requests");
+            Dispatcher.UIThread.RunJobs();
+
+            var view = window.GetVisualDescendants().OfType<HostingView>().Single();
+            var list = view.FindControl<ListBox>("HostingItems")!;
+            list.SelectedIndex = 0;
+            Dispatcher.UIThread.RunJobs();
+            Assert.NotNull(vm.SelectedPullRequest);
+
+            var approve = view.FindControl<Button>("ApprovePullRequest")!;
+            Assert.False(vm.IsHostingBusy);
+            Assert.True(approve.IsEffectivelyEnabled);
+            var center = approve.TranslatePoint(new Point(approve.Bounds.Width / 2, approve.Bounds.Height / 2), window);
+            Assert.NotNull(center);
+            window.MouseDown(center.Value, Avalonia.Input.MouseButton.Left);
+            window.MouseUp(center.Value, Avalonia.Input.MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("APPROVE", provider.LastReview);
+            Assert.Equal("owner", provider.ReviewRepository?.Owner);
+            Assert.Equal("repo", provider.ReviewRepository?.Name);
+            Assert.Contains("Approved pull request #42", vm.HostingStatus);
+            Assert.NotNull(vm.SelectedPullRequest);
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task PullRequestWorkspaceExposesACreatePullRequestAction()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync(new FakeHostingProvider());
+        vm.AutoRefresh = false;
+        var template = new DockContentTemplate(vm);
+        Avalonia.Application.Current!.DataTemplates.Add(template);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            window.ShowDocument("Pull Requests");
+            Dispatcher.UIThread.RunJobs();
+            var view = window.GetVisualDescendants().OfType<HostingView>().Single();
+            var newItem = view.FindControl<Button>("NewItem")!;
+            Assert.Equal("New pull request", newItem.Content);
+            var expander = view.FindControl<Expander>("CreateItemExpander")!;
+            Assert.False(expander.IsExpanded);
+            Assert.Equal("Create a pull request", expander.Header);
+
+            newItem.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(expander.IsExpanded);
+            Assert.NotNull(view.FindControl<Button>("CreatePullRequestFromBranch"));
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task BranchContextMenuPrefillsThePullRequestFormForARemoteBranch()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        vm.PullRequestHead = "";
+        vm.PullRequestBase = "";
+        vm.HostingDraftTitle = "";
+        vm.IsPullRequestFormExpanded = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        var template = new DockContentTemplate(vm);
+        Avalonia.Application.Current!.DataTemplates.Add(template);
+        var window = new MainWindow(fixture.SettingsPath) { DataContext = vm };
+        try
+        {
+            window.Show();
+            window.ShowDocument("Pull Requests");
+            Dispatcher.UIThread.RunJobs();
+            var view = window.GetVisualDescendants().OfType<HostingView>().Single();
+            var navigation = new NavigationView { DataContext = vm };
+            var item = (
+                (IEnumerable<MenuItem>)navigation.BuildBranchMenu("origin/feature/remote-change").ItemsSource!
+            ).Single(menu => menu.Header?.ToString() == "Create pull request…");
+
+            item.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.Contains("already on origin", vm.HostingStatus);
+            Assert.Contains("already on origin", vm.PullRequestPrefillHint);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("feature/remote-change", vm.PullRequestHead);
+            Assert.Equal(vm.CurrentBranch, vm.PullRequestBase);
+            Assert.Equal("feature/remote-change", vm.HostingDraftTitle);
+            Assert.True(vm.IsPullRequestWorkspace);
+            Assert.True(vm.IsPullRequestFormExpanded);
+            Assert.True(vm.HasPullRequestPrefillHint);
+            Assert.Equal("origin", vm.SelectedRemote?.Name);
+            Assert.True(view.FindControl<Expander>("CreateItemExpander")!.IsExpanded);
+        }
+        finally
+        {
+            window.Close();
+            Avalonia.Application.Current.DataTemplates.Remove(template);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task BranchContextMenuGuidesCheckoutForALocalBranch()
+    {
+        using var fixture = new WorkspaceFixture();
+        var vm = await fixture.OpenAsync();
+        vm.AutoRefresh = false;
+        vm.IsPullRequestFormExpanded = false;
+
+        vm.PrefillPullRequestFromBranch("feature/authentication");
+
+        Assert.Equal("feature/authentication", vm.PullRequestHead);
+        Assert.Equal(vm.CurrentBranch, vm.PullRequestBase);
+        Assert.Equal("feature/authentication", vm.HostingDraftTitle);
+        Assert.True(vm.IsPullRequestFormExpanded);
+        Assert.True(vm.HasPullRequestPrefillHint);
+        Assert.Contains("Check out feature/authentication", vm.HostingStatus);
+    }
+
+    [AvaloniaFact]
+    public async Task PullRequestRefreshPreservesTheSelectedPullRequest()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var provider = new FakeHostingProvider();
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        vm.GithubToken = "session-token";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        vm.SelectedPullRequest = Assert.Single(vm.PullRequests);
+
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+
+        var selected = Assert.Single(vm.PullRequests);
+        Assert.Equal(selected, vm.SelectedPullRequest);
+        Assert.Equal(42, vm.SelectedPullRequest!.Number);
+        Assert.Equal("owner", vm.SelectedPullRequest.Repository?.Owner);
+        Assert.Equal("repo", vm.SelectedPullRequest.Repository?.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task ReviewCommandsExplainWhenNoPullRequestIsSelected()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var provider = new FakeHostingProvider();
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        vm.GithubToken = "session-token";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        vm.SelectedPullRequest = null;
+
+        await vm.ApprovePullRequestCommand.ExecuteAsync(null);
+        Assert.Contains("Select a pull request before approving", vm.HostingStatus);
+        Assert.Null(provider.LastReview);
+
+        await vm.RequestPullRequestChangesCommand.ExecuteAsync(null);
+        Assert.Contains("Select a pull request before requesting changes", vm.HostingStatus);
+        Assert.Null(provider.LastReview);
+    }
+
+    [AvaloniaFact]
+    public async Task ApprovingOwnPullRequestExplainsTheHostingRule()
+    {
+        using var fixture = new WorkspaceFixture();
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        var provider = new FakeHostingProvider { Login = "Author" };
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        await WaitUntilAsync(() => vm.Remotes.Count == 1);
+        vm.GithubToken = "session-token";
+        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        vm.SelectedPullRequest = Assert.Single(vm.PullRequests);
+
+        await vm.ApprovePullRequestCommand.ExecuteAsync(null);
+
+        Assert.Null(provider.LastReview);
+        Assert.Contains("cannot approve your own pull request", vm.HostingStatus);
+        Assert.Contains("GitHub", vm.HostingStatus);
+    }
+
+    [AvaloniaFact]
     public async Task AmendLoadsTheExistingMessageAndCanReuseItWhenBlank()
     {
         using var fixture = new WorkspaceFixture();
         var vm = await fixture.OpenAsync();
         vm.AutoRefresh = false;
-        string oldMessage, oldSha;
+        string oldMessage,
+            oldSha;
         int oldCount;
         using (var repo = new Repository(fixture.RepositoryPath))
         {
@@ -1330,7 +1661,12 @@ public sealed class WorkspaceTests
         var selected = vm.HistoryRows[^2];
         vm.SelectedHistoryRow = selected;
         var view = new HistoryView { DataContext = vm };
-        var window = new Window { Content = view, Width = 1000, Height = 330 };
+        var window = new Window
+        {
+            Content = view,
+            Width = 1000,
+            Height = 330,
+        };
         try
         {
             window.Show();
@@ -1378,7 +1714,10 @@ public sealed class WorkspaceTests
             Assert.All(vm.HistoryRows, item => Assert.Empty(item.Segments));
             SavePreview(window, "stable-history-hover.png");
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -1391,8 +1730,18 @@ public sealed class WorkspaceTests
         vm.SelectedHistoryRow = vm.HistoryRows[0];
         var target = vm.HistoryRows[3];
         var view = new HistoryView { DataContext = vm };
-        var window = new Window { Content = view, Width = 1000, Height = 600 };
-        var other = new Window { Content = new TextBox(), Width = 200, Height = 100 };
+        var window = new Window
+        {
+            Content = view,
+            Width = 1000,
+            Height = 600,
+        };
+        var other = new Window
+        {
+            Content = new TextBox(),
+            Width = 200,
+            Height = 100,
+        };
         try
         {
             window.Show();
@@ -1428,7 +1777,11 @@ public sealed class WorkspaceTests
     {
         public TaskCompletionSource? Release { get; set; }
         public bool Paused { get; private set; }
-        public async Task<RepositoryOverview> ReadOverviewAsync(string path, CancellationToken cancellationToken = default)
+
+        public async Task<RepositoryOverview> ReadOverviewAsync(
+            string path,
+            CancellationToken cancellationToken = default
+        )
         {
             if (Release is { } gate)
             {
@@ -1569,6 +1922,7 @@ public sealed class WorkspaceTests
         Assert.Contains("Checkout context-branch", labels);
         Assert.Contains("Rename branch…", labels);
         Assert.Contains("Delete merged branch…", labels);
+        Assert.Contains("Create pull request…", labels);
         Assert.Contains("Show branch history", labels);
     }
 
@@ -2115,9 +2469,10 @@ public sealed class WorkspaceTests
             failed
                 .FindControl<Button>("Submit")!
                 .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-            await WaitUntilAsync(() =>
-                failed.FindControl<TextBlock>("Feedback")!.Text?.Contains("already a repository") == true,
-                () => $"Feedback: {failed.FindControl<TextBlock>("Feedback")!.Text}; creation: {vm.RepositoryCreationFeedback}; status: {vm.Status}; destination: {vm.NewRepositoryDestination}; busy: {vm.IsFeatureBusy}"
+            await WaitUntilAsync(
+                () => failed.FindControl<TextBlock>("Feedback")!.Text?.Contains("already a repository") == true,
+                () =>
+                    $"Feedback: {failed.FindControl<TextBlock>("Feedback")!.Text}; creation: {vm.RepositoryCreationFeedback}; status: {vm.Status}; destination: {vm.NewRepositoryDestination}; busy: {vm.IsFeatureBusy}"
             );
             vm.PropertyChanged -= RefreshStatus;
             Assert.True(empty.IsEmpty);
@@ -2448,9 +2803,12 @@ public sealed class WorkspaceTests
             Assert.Equal(privatePath, saved.SshPrivateKeyPath);
             Assert.Equal(privatePath + ".pub", saved.SshPublicKeyPath);
             var puttyPublicPath = Path.Combine(directory, "putty-public.pub");
-            File.WriteAllText(puttyPublicPath,
+            File.WriteAllText(
+                puttyPublicPath,
                 "---- BEGIN SSH2 PUBLIC KEY ----\nComment: \"PuTTY public key\"\n"
-                + Convert.ToBase64String(keyData) + "\n---- END SSH2 PUBLIC KEY ----");
+                    + Convert.ToBase64String(keyData)
+                    + "\n---- END SSH2 PUBLIC KEY ----"
+            );
             vm.SshPublicKeyPath = puttyPublicPath;
             await WaitUntilAsync(() => vm.HasLoadedPublicKey);
             Assert.Equal("ssh-ed25519 " + Convert.ToBase64String(keyData), vm.SshPublicKeyText);
@@ -2527,7 +2885,12 @@ public sealed class WorkspaceTests
         Assert.Contains("Git configuration", vm.CommitIdentitySource);
 
         var view = new SettingsView { DataContext = vm };
-        var window = new Window { Content = view, Width = 1000, Height = 800 };
+        var window = new Window
+        {
+            Content = view,
+            Width = 1000,
+            Height = 800,
+        };
         try
         {
             window.Show();
@@ -2545,7 +2908,10 @@ public sealed class WorkspaceTests
             Assert.Equal('●', view.FindControl<TextBox>("TemporaryTokenInput")!.PasswordChar);
             SavePreview(window, "advanced-git-connections.png");
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -3091,11 +3457,21 @@ public sealed class WorkspaceTests
         vm.Dispose();
         var legacyStore = new ProtectedIntegrationStore(fixture.SettingsPath);
         if (legacyStore.IsSupported)
-            await legacyStore.SavePayloadAsync(profile, "azure", System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
-            {
-                Version = 3,
-                Connections = new[] { new { Organization = "team", Token = "pat-team" }, new { Organization = "other", Token = "pat-other" } }
-            }));
+            await legacyStore.SavePayloadAsync(
+                profile,
+                "azure",
+                System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+                    new
+                    {
+                        Version = 3,
+                        Connections = new[]
+                        {
+                            new { Organization = "team", Token = "pat-team" },
+                            new { Organization = "other", Token = "pat-other" },
+                        },
+                    }
+                )
+            );
         var restored = await fixture.OpenAsync(azureRepositoryLoader: loader);
         restored.AutoRefresh = false;
         var store = new ProtectedIntegrationStore(fixture.SettingsPath);
@@ -3657,7 +4033,7 @@ public sealed class WorkspaceTests
             File.WriteAllText(
                 Path.Combine(fixture.RepositoryPath, ".gitmodules"),
                 "[submodule \"UnrealSharp\"]\n\tpath = libs/UnrealSharp\n\turl = https://example.com/UnrealSharp.git\n"
-                + "[submodule \"Tools\"]\n\tpath = libs/Tools\n\turl = https://example.com/Tools.git\n"
+                    + "[submodule \"Tools\"]\n\tpath = libs/Tools\n\turl = https://example.com/Tools.git\n"
             );
             Commands.Stage(parent, ".gitmodules");
             using var child = new Repository(childPath);
@@ -3721,8 +4097,11 @@ public sealed class WorkspaceTests
             SavePreview(window, "submodule-entered.png");
 
             File.AppendAllText(Path.Combine(childPath, "Plugin.cs"), "// preserve this edit\n");
-            var picker = bar.GetVisualDescendants().OfType<Button>().Single(button =>
-                button.DataContext is RepositoryCrumb { IsSubmodule: true } && button.Content is StackPanel);
+            var picker = bar.GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button =>
+                    button.DataContext is RepositoryCrumb { IsSubmodule: true } && button.Content is StackPanel
+                );
             picker.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
             await WaitUntilAsync(() => picker.ContextMenu?.IsOpen == true);
             var choices = picker.ContextMenu!.ItemsSource!.Cast<MenuItem>().ToArray();
@@ -3738,8 +4117,11 @@ public sealed class WorkspaceTests
             Assert.Equal(tabs, vm.RepositoryWorkspaceTabs.Count);
             Assert.Contains("preserve this edit", File.ReadAllText(Path.Combine(childPath, "Plugin.cs")));
             Dispatcher.UIThread.RunJobs();
-            var close = bar.GetVisualDescendants().OfType<Button>().Single(button =>
-                button.DataContext is RepositoryCrumb { IsSubmodule: true } && Equals(button.Content, "×"));
+            var close = bar.GetVisualDescendants()
+                .OfType<Button>()
+                .Single(button =>
+                    button.DataContext is RepositoryCrumb { IsSubmodule: true } && Equals(button.Content, "×")
+                );
             close.Command!.Execute(close.CommandParameter);
             await WaitUntilAsync(() => vm.HistoryRows.Any(row => row.Subject == "Add UnrealSharp submodule"));
             Assert.Equal(root, vm.SelectedRepository);
@@ -3804,9 +4186,7 @@ public sealed class WorkspaceTests
             Assert.True(IntegrationBrowserPolicy.AllowsForgejo(new Uri(vm.ForgejoTokenPageUrl)));
             Assert.True(IntegrationBrowserPolicy.Allows(new Uri(vm.ForgejoTokenPageUrl)));
             Assert.False(
-                IntegrationBrowserPolicy.AllowsForgejo(
-                    new Uri("http://forgejo.local:3001/user/settings/applications")
-                )
+                IntegrationBrowserPolicy.AllowsForgejo(new Uri("http://forgejo.local:3001/user/settings/applications"))
             );
             Assert.False(
                 IntegrationBrowserPolicy.AllowsForgejo(
@@ -3815,7 +4195,9 @@ public sealed class WorkspaceTests
             );
 
             var settingsPath = Path.Combine(fixture.SettingsPath, "settings.json");
-            await WaitUntilAsync(() => File.Exists(settingsPath) && File.ReadAllText(settingsPath).Contains("forgejo.local:3000"));
+            await WaitUntilAsync(() =>
+                File.Exists(settingsPath) && File.ReadAllText(settingsPath).Contains("forgejo.local:3000")
+            );
             var saved = await new JsonSettingsStore(fixture.SettingsPath).LoadAsync();
             Assert.Equal("http://forgejo.local:3000", saved.ForgejoBaseUrl);
 
@@ -3848,6 +4230,63 @@ public sealed class WorkspaceTests
         {
             ForgejoDefaults.ConfiguredBaseUrl = previousBaseUrl;
         }
+    }
+
+    [AvaloniaFact]
+    public async Task CreatePullRequestFromBranchPushesTheCurrentBranchBeforeCreatingIt()
+    {
+        using var fixture = new WorkspaceFixture();
+        var remotePath = Path.Combine(Path.GetDirectoryName(fixture.RepositoryPath)!, "pull-request.git");
+        Repository.Init(remotePath, isBare: true);
+        using (var repo = new Repository(fixture.RepositoryPath))
+        {
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+            repo.Network.Remotes.Add("local", remotePath);
+            Commands.Checkout(repo, repo.Branches["feature/authentication"]);
+        }
+
+        var provider = new FakeHostingProvider();
+        var vm = await fixture.OpenAsync(provider);
+        vm.AutoRefresh = false;
+        vm.GithubToken = "fixture-token";
+        vm.PushCurrentBranchForPullRequest = (repositoryPath, remoteName, cancellationToken, network, remoteBranch) =>
+        {
+            Assert.Equal("origin", remoteName);
+            return new GitLlama.Git.GitRemoteService().PushCurrentBranchAsync(
+                repositoryPath,
+                "local",
+                cancellationToken,
+                network,
+                remoteBranch
+            );
+        };
+        await WaitUntilAsync(() =>
+            vm.Remotes.Count == 2
+            && vm.Remotes.Any(remote => remote.Name == "origin")
+            && vm.CurrentBranch == "feature/authentication"
+        );
+        vm.SelectedRemote = vm.Remotes.Single(remote => remote.Name == "origin");
+        vm.HostingDraftTitle = "Ship authentication";
+        vm.HostingDraftBody = "Adds the new login flow.";
+        vm.PullRequestBase = "main";
+
+        await vm.CreatePullRequestFromBranchCommand.ExecuteAsync(null);
+
+        Assert.True(provider.CreatedRepository is not null, vm.HostingStatus);
+        Assert.Equal("owner", provider.CreatedRepository?.Owner);
+        Assert.Equal("repo", provider.CreatedRepository?.Name);
+        Assert.Equal("Ship authentication", provider.CreatedTitle);
+        Assert.Equal("Adds the new login flow.", provider.CreatedBody);
+        Assert.Equal("feature/authentication", provider.CreatedHead);
+        Assert.Equal("main", provider.CreatedBase);
+        Assert.Equal("fixture-token", provider.CreatedToken);
+        using (var local = new Repository(fixture.RepositoryPath))
+        using (var remote = new Repository(remotePath))
+        {
+            Assert.Equal(local.Head.Tip.Sha, remote.Branches["feature/authentication"].Tip.Sha);
+        }
+
+        Assert.Contains("Created pull request from feature/authentication", vm.HostingStatus);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, Func<string>? diagnostic = null)
@@ -3995,14 +4434,35 @@ public sealed class WorkspaceTests
     public async Task PullRequestTreeGroupsAssignmentsSearchesAndOffersLocalMerge()
     {
         using var fixture = new WorkspaceFixture();
-        using (var repo = new Repository(fixture.RepositoryPath)) repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
-        HostingItem Pull(int number, string title, string author) => new(number, title, "Description", "open", author,
-            $"https://github.com/owner/repo/pull/{number}", true, new string('a', 40), "feature/change", "main");
+        using (var repo = new Repository(fixture.RepositoryPath))
+            repo.Network.Remotes.Add("origin", "https://github.com/owner/repo.git");
+        HostingItem Pull(int number, string title, string author) =>
+            new(
+                number,
+                title,
+                "Description",
+                "open",
+                author,
+                $"https://github.com/owner/repo/pull/{number}",
+                true,
+                new string('a', 40),
+                "feature/change",
+                "main"
+            );
         var provider = new FakeHostingProvider
         {
             Login = "me",
-            Items = [Pull(41, "My change", "ME"), Pull(42, "Authentication update", "contributor") with
-            { Assignees = ["Me"], RequestedReviewers = ["me"], IsDraft = true }, Pull(43, "Other work", "another")]
+            Items =
+            [
+                Pull(41, "My change", "ME"),
+                Pull(42, "Authentication update", "contributor") with
+                {
+                    Assignees = ["Me"],
+                    RequestedReviewers = ["me"],
+                    IsDraft = true,
+                },
+                Pull(43, "Other work", "another"),
+            ],
         };
         var vm = await fixture.OpenAsync(provider);
         vm.AutoRefresh = false;
@@ -4035,8 +4495,15 @@ public sealed class WorkspaceTests
             Dispatcher.UIThread.RunJobs();
             Assert.NotNull(nav.FindControl<TreeView>("PullRequestTree"));
             var menu = nav.BuildPullRequestMenu(provider.Items[1]);
-            Assert.Contains(menu.ItemsSource!.Cast<MenuItem>(), item => item.Header!.ToString()!.StartsWith("Merge #42 into"));
-            Assert.True(menu.ItemsSource!.Cast<MenuItem>().Single(item => item.Header!.ToString()!.StartsWith("Merge #42 into")).IsEnabled);
+            Assert.Contains(
+                menu.ItemsSource!.Cast<MenuItem>(),
+                item => item.Header!.ToString()!.StartsWith("Merge #42 into")
+            );
+            Assert.True(
+                menu.ItemsSource!.Cast<MenuItem>()
+                    .Single(item => item.Header!.ToString()!.StartsWith("Merge #42 into"))
+                    .IsEnabled
+            );
             var category = nav.FindControl<Expander>("PullRequestCategory")!;
             var searchBox = nav.FindControl<TextBox>("PullRequestSearchBox")!;
             var searchPosition = searchBox.TranslatePoint(new Avalonia.Point(0, 0), category);
@@ -4046,7 +4513,11 @@ public sealed class WorkspaceTests
             Assert.Null(provider.MergedSha);
             Dispatcher.UIThread.RunJobs();
             Assert.Equal(searchPosition, searchBox.TranslatePoint(new Avalonia.Point(0, 0), category));
-            foreach (var expander in nav.GetVisualDescendants().OfType<Expander>().Where(expander => expander.Classes.Contains("navigation")))
+            foreach (
+                var expander in nav.GetVisualDescendants()
+                    .OfType<Expander>()
+                    .Where(expander => expander.Classes.Contains("navigation"))
+            )
                 expander.IsExpanded = expander.Name == "PullRequestCategory";
             if (nav.FindControl<Expander>("PullRequestCategory")!.Content is ResizableCategoryPanel panel)
                 panel.Children[0].MaxHeight = 480;
@@ -4078,9 +4549,22 @@ public sealed class WorkspaceTests
         {
             if (repository.Owner.Equals("empty", StringComparison.OrdinalIgnoreCase))
                 return Task.FromResult(new HostingPage([], false));
-            var item = new HostingItem(page == 1 ? 42 : 43, repository.Owner + " change", "", "open", "me",
-                $"https://github.com/{repository.Owner}/repo/pull/42", true, new string('a', 40), "feature", "main")
-                { Assignees = ["me"], RequestedReviewers = ["me"] };
+            var item = new HostingItem(
+                page == 1 ? 42 : 43,
+                repository.Owner + " change",
+                "",
+                "open",
+                "author",
+                $"https://github.com/{repository.Owner}/repo/pull/42",
+                true,
+                new string('a', 40),
+                "feature",
+                "main"
+            )
+            {
+                Assignees = ["me"],
+                RequestedReviewers = ["me"],
+            };
             return Task.FromResult(new HostingPage([item], repository.Owner == "fork" && page == 1));
         };
         var vm = await fixture.OpenAsync(provider);
@@ -4091,11 +4575,17 @@ public sealed class WorkspaceTests
         Assert.Equal(3, vm.PullRequests.Count);
         Assert.False(vm.HasMorePullRequests);
         Assert.Equal(4, provider.ListRequests.Count);
-        Assert.Single(provider.ListRequests, request => request.Repository.Owner.Equals("team", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(
+            provider.ListRequests,
+            request => request.Repository.Owner.Equals("team", StringComparison.OrdinalIgnoreCase)
+        );
         Assert.Equal(2, vm.PullRequests.Count(item => item.Number == 42));
         var all = vm.PullRequestTree.Single(node => node.Key == "all");
         Assert.Equal(new[] { "fork/repo", "team/repo" }, all.Children.Select(node => node.Name.ToLowerInvariant()));
-        Assert.All(vm.PullRequestTree, group => Assert.DoesNotContain(group.Children, node => node.Name.StartsWith("empty/")));
+        Assert.All(
+            vm.PullRequestTree,
+            group => Assert.DoesNotContain(group.Children, node => node.Name.StartsWith("empty/"))
+        );
         Assert.Equal(3, all.Children.SelectMany(node => node.Children).Select(node => node.Key).Distinct().Count());
         vm.SelectedRemote = vm.Remotes.Single(remote => remote.Name == "upstream");
         Assert.Equal(3, vm.PullRequests.Count);
@@ -4152,9 +4642,25 @@ public sealed class WorkspaceTests
             repo.Network.Remotes.Remove("origin");
         await vm.RefreshCommand.ExecuteAsync(null);
         await WaitUntilAsync(() => vm.Remotes.Count == 0);
-        response.SetResult(new HostingPage([
-            new HostingItem(42, "Stale PR", "", "open", "me", "https://github.com/old/repo/pull/42", true, "", "feature", "main")
-        ], false));
+        response.SetResult(
+            new HostingPage(
+                [
+                    new HostingItem(
+                        42,
+                        "Stale PR",
+                        "",
+                        "open",
+                        "me",
+                        "https://github.com/old/repo/pull/42",
+                        true,
+                        "",
+                        "feature",
+                        "main"
+                    ),
+                ],
+                false
+            )
+        );
         await loading;
         Assert.Empty(vm.PullRequests);
         Assert.All(vm.PullRequestTree, group => Assert.Empty(group.Children));
@@ -4171,17 +4677,38 @@ public sealed class WorkspaceTests
         }
         var provider = new FakeHostingProvider
         {
-            PageLoader = (repository, _, state, page, _) => Task.FromResult(new HostingPage(
-                Enumerable.Range((page - 1) * 50 + 1, page == 1 ? 50 : 5).Select(number =>
-                    new HostingItem(number, $"{repository.Owner} {state} change {number}", "", state, "me",
-                        $"https://github.com/{repository.Owner}/repo/pull/{number}", true,
-                        new string('a', 40), "feature", "main")).ToArray(), page == 1))
+            PageLoader = (repository, _, state, page, _) =>
+                Task.FromResult(
+                    new HostingPage(
+                        Enumerable
+                            .Range((page - 1) * 50 + 1, page == 1 ? 50 : 5)
+                            .Select(number => new HostingItem(
+                                number,
+                                $"{repository.Owner} {state} change {number}",
+                                "",
+                                state,
+                                "me",
+                                $"https://github.com/{repository.Owner}/repo/pull/{number}",
+                                true,
+                                new string('a', 40),
+                                "feature",
+                                "main"
+                            ))
+                            .ToArray(),
+                        page == 1
+                    )
+                ),
         };
         var vm = await fixture.OpenAsync(provider);
         vm.AutoRefresh = false;
         await WaitUntilAsync(() => vm.Remotes.Count == 2);
         var view = new HostingView(true) { DataContext = vm };
-        var window = new Window { Content = view, Width = 1100, Height = 800 };
+        var window = new Window
+        {
+            Content = view,
+            Width = 1100,
+            Height = 800,
+        };
         try
         {
             window.Show();
@@ -4190,8 +4717,10 @@ public sealed class WorkspaceTests
             Assert.Equal(110, list.Items.Count);
             Assert.Equal(55, vm.PullRequests.Count(pr => pr.Repository!.Owner == "fork"));
             Assert.Equal(55, vm.PullRequests.Count(pr => pr.Repository!.Owner == "team"));
-            Assert.DoesNotContain(view.GetVisualDescendants().OfType<TextBox>(),
-                input => input.IsEffectivelyVisible && input.Watermark is "GitHub owner" or "Repository");
+            Assert.DoesNotContain(
+                view.GetVisualDescendants().OfType<TextBox>(),
+                input => input.IsEffectivelyVisible && input.Watermark is "GitHub owner" or "Repository"
+            );
             vm.SelectedPullRequest = vm.PullRequests.First(pr => pr.Repository!.Owner == "fork");
             await WaitUntilAsync(() => vm.HostingComments.Count > 0);
             vm.SelectedRemote = vm.Remotes.Single(remote => remote.Name == "upstream");
@@ -4199,11 +4728,15 @@ public sealed class WorkspaceTests
             Assert.NotEmpty(vm.HostingComments);
             Assert.Equal(110, list.Items.Count);
             vm.HostingState = "all";
-            await WaitUntilAsync(() => vm.PullRequests.Count == 110 && !vm.IsHostingBusy
-                && vm.PullRequests.All(pr => pr.State == "all"));
+            await WaitUntilAsync(() =>
+                vm.PullRequests.Count == 110 && !vm.IsHostingBusy && vm.PullRequests.All(pr => pr.State == "all")
+            );
             SavePreview(window, "combined-pull-request-workspace.png");
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [AvaloniaFact]
@@ -4219,15 +4752,26 @@ public sealed class WorkspaceTests
         var navigations = new List<string>();
         vm.DockDocument = navigations.Add;
         var nav = new NavigationView { DataContext = vm };
-        var window = new Window { Content = nav, Width = 400, Height = 900 };
+        var window = new Window
+        {
+            Content = nav,
+            Width = 400,
+            Height = 900,
+        };
         try
         {
             window.Show();
-            foreach (var expander in nav.GetVisualDescendants().OfType<Expander>().Where(e => e.Classes.Contains("navigation")))
+            foreach (
+                var expander in nav.GetVisualDescendants()
+                    .OfType<Expander>()
+                    .Where(e => e.Classes.Contains("navigation"))
+            )
                 expander.IsExpanded = expander.Name == "PullRequestCategory";
             Dispatcher.UIThread.RunJobs();
             var tree = nav.FindControl<TreeView>("PullRequestTree")!;
-            var row = tree.GetVisualDescendants().OfType<TreeViewItem>().First(r => r.DataContext is PullRequestTreeNode { Item: not null });
+            var row = tree.GetVisualDescendants()
+                .OfType<TreeViewItem>()
+                .First(r => r.DataContext is PullRequestTreeNode { Item: not null });
             var point = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
             window.MouseDown(point, Avalonia.Input.MouseButton.Right);
             window.MouseUp(point, Avalonia.Input.MouseButton.Right);
@@ -4236,7 +4780,10 @@ public sealed class WorkspaceTests
             Assert.NotNull(menu);
             Assert.True(menu.IsOpen);
             Assert.Empty(navigations);
-            Assert.Contains(menu.ItemsSource!.Cast<MenuItem>(), item => item.Header!.ToString()!.StartsWith("Merge #42 into"));
+            Assert.Contains(
+                menu.ItemsSource!.Cast<MenuItem>(),
+                item => item.Header!.ToString()!.StartsWith("Merge #42 into")
+            );
             menu.Close();
             window.MouseDown(point, Avalonia.Input.MouseButton.Right);
             window.MouseUp(point, Avalonia.Input.MouseButton.Right);
@@ -4249,18 +4796,31 @@ public sealed class WorkspaceTests
             window.MouseUp(point, Avalonia.Input.MouseButton.Left);
             Assert.Equal("Pull Requests", Assert.Single(navigations));
         }
-        finally { window.Close(); }
+        finally
+        {
+            window.Close();
+        }
     }
 
     private sealed class FakeHostingProvider : IHostingProvider
     {
-        public Func<HostingRepository, bool, string, int, CancellationToken, Task<HostingPage>>? PageLoader { get; set; }
+        public Func<
+            HostingRepository,
+            bool,
+            string,
+            int,
+            CancellationToken,
+            Task<HostingPage>
+        >? PageLoader { get; set; }
         public List<(HostingRepository Repository, int Page)> ListRequests { get; } = [];
         public HostingRepository? CommentRepository { get; private set; }
         public HostingRepository? ReviewRepository { get; private set; }
         public string Login { get; set; } = "Contributor";
         public IReadOnlyList<HostingItem>? Items { get; set; }
-        public Task<string> AuthenticatedUserAsync(string token, CancellationToken ct = default) => Task.FromResult(Login);
+
+        public Task<string> AuthenticatedUserAsync(string token, CancellationToken ct = default) =>
+            Task.FromResult(Login);
+
         public bool Offline { get; set; }
         public string? LastReview { get; private set; }
         public string? MergedSha { get; private set; }
@@ -4281,8 +4841,10 @@ public sealed class WorkspaceTests
                 throw new HttpRequestException("Offline test");
             }
 
-            if (PageLoader is not null) return PageLoader(repository, pullRequests, state, page, ct);
-            if (Items is not null) return Task.FromResult(new HostingPage(Items, false));
+            if (PageLoader is not null)
+                return PageLoader(repository, pullRequests, state, page, ct);
+            if (Items is not null)
+                return Task.FromResult(new HostingPage(Items, false));
 
             return Task.FromResult(
                 new HostingPage(
@@ -4292,7 +4854,7 @@ public sealed class WorkspaceTests
                             "Improve authentication",
                             "Test description",
                             pullRequests ? "open" : IssueState,
-                            "Contributor",
+                            "Author",
                             "https://github.com/owner/repo/pull/42",
                             pullRequests,
                             "reviewed-sha",
@@ -4313,8 +4875,17 @@ public sealed class WorkspaceTests
         )
         {
             CommentRepository = repository;
-            return Task.FromResult<IReadOnlyList<HostingComment>>([new("Reviewer", "Looks good", DateTimeOffset.UtcNow)]);
+            return Task.FromResult<IReadOnlyList<HostingComment>>([
+                new("Reviewer", "Looks good", DateTimeOffset.UtcNow),
+            ]);
         }
+
+        public HostingRepository? CreatedRepository { get; private set; }
+        public string? CreatedTitle { get; private set; }
+        public string? CreatedBody { get; private set; }
+        public string? CreatedHead { get; private set; }
+        public string? CreatedBase { get; private set; }
+        public string? CreatedToken { get; private set; }
 
         public Task<HostingItem> CreateAsync(
             HostingRepository repository,
@@ -4324,8 +4895,15 @@ public sealed class WorkspaceTests
             string? @base,
             string token,
             CancellationToken ct = default
-        ) =>
-            Task.FromResult(
+        )
+        {
+            CreatedRepository = repository;
+            CreatedTitle = title;
+            CreatedBody = body;
+            CreatedHead = head;
+            CreatedBase = @base;
+            CreatedToken = token;
+            return Task.FromResult(
                 new HostingItem(
                     43,
                     title,
@@ -4339,6 +4917,7 @@ public sealed class WorkspaceTests
                     @base ?? ""
                 )
             );
+        }
 
         public Task CommentAsync(
             HostingRepository repository,

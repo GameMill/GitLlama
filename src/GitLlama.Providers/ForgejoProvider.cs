@@ -14,8 +14,7 @@ public static class ForgejoDefaults
 
     public static Uri BaseUri => Normalize(ConfiguredBaseUrl);
 
-    public static Uri Normalize(string? value) =>
-        TryNormalize(value, out var uri) ? uri : BuildFallback();
+    public static Uri Normalize(string? value) => TryNormalize(value, out var uri) ? uri : BuildFallback();
 
     public static bool TryNormalize(string? value, out Uri uri)
     {
@@ -33,14 +32,24 @@ public static class ForgejoDefaults
         }
 
         var path = parsed.AbsolutePath.TrimEnd('/') + "/";
-        uri = new UriBuilder(parsed) { Path = path, Query = "", Fragment = "" }.Uri;
+        uri = new UriBuilder(parsed)
+        {
+            Path = path,
+            Query = "",
+            Fragment = "",
+        }.Uri;
         return true;
     }
 
     private static Uri BuildFallback()
     {
         var fallback = new Uri(HostingDefaults.ForgejoBaseUrl);
-        return new UriBuilder(fallback) { Path = "/", Query = "", Fragment = "" }.Uri;
+        return new UriBuilder(fallback)
+        {
+            Path = "/",
+            Query = "",
+            Fragment = "",
+        }.Uri;
     }
 }
 
@@ -109,7 +118,9 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
         {
             var remotePort = port ?? (scheme == "http" ? 80 : 443);
             var configuredPort = configured.IsDefaultPort
-                ? configured.Scheme == "http" ? 80 : 443
+                ? configured.Scheme == "http"
+                    ? 80
+                    : 443
                 : configured.Port;
             if (remotePort != configuredPort)
             {
@@ -134,10 +145,7 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
         }
 
         var parts = path.Trim('/').Split('/');
-        if (
-            parts.Length != 2
-            || !parts.All(part => RepositoryPart().IsMatch(part) && part is not "." and not "..")
-        )
+        if (parts.Length != 2 || !parts.All(part => RepositoryPart().IsMatch(part) && part is not "." and not ".."))
         {
             return false;
         }
@@ -146,13 +154,7 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
         return true;
     }
 
-    private static bool TrySplitRemote(
-        string url,
-        out string scheme,
-        out string host,
-        out int? port,
-        out string path
-    )
+    private static bool TrySplitRemote(string url, out string scheme, out string host, out int? port, out string path)
     {
         scheme = host = path = "";
         port = null;
@@ -177,10 +179,7 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
             !Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || uri.Scheme is not ("http" or "https" or "ssh" or "git")
             || string.IsNullOrWhiteSpace(uri.Host)
-            || (
-                uri.Scheme is "http" or "https"
-                && !string.IsNullOrEmpty(uri.UserInfo)
-            )
+            || (uri.Scheme is "http" or "https" && !string.IsNullOrEmpty(uri.UserInfo))
             || (uri.Scheme is "ssh" or "git" && uri.UserInfo.Contains(':'))
             || !string.IsNullOrEmpty(uri.Query)
             || !string.IsNullOrEmpty(uri.Fragment)
@@ -382,13 +381,7 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
     {
         ValidateNumber(number);
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedSha);
-        using (var pull = await RequestAsync(
-            HttpMethod.Get,
-            $"{Root(repository)}/pulls/{number}",
-            null,
-            token,
-            ct
-        ))
+        using (var pull = await RequestAsync(HttpMethod.Get, $"{Root(repository)}/pulls/{number}", null, token, ct))
         {
             var head = pull.RootElement.TryGetProperty("head", out var property) ? property : default;
             if (!Text(head, "sha").Equals(expectedSha, StringComparison.OrdinalIgnoreCase))
@@ -460,6 +453,7 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!response.IsSuccessStatusCode)
         {
+            var detail = await ErrorDetailAsync(response, ct);
             var message = response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => "Forgejo authentication failed. Check the access token.",
@@ -471,11 +465,70 @@ public sealed partial class ForgejoProvider : IHostingProvider, IDisposable
                     "Forgejo rejected the change. Check branch names, permissions and repository rules.",
                 _ => $"Forgejo request failed (HTTP {(int)response.StatusCode}).",
             };
+            if (
+                detail.Length > 0
+                && response.StatusCode
+                    is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+            )
+            {
+                message += " " + detail;
+            }
+
             throw new InvalidOperationException(message);
         }
 
         var text = await response.Content.ReadAsStringAsync(ct);
         return JsonDocument.Parse(string.IsNullOrWhiteSpace(text) ? "{}" : text);
+    }
+
+    private static async Task<string> ErrorDetailAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var text = await response.Content.ReadAsStringAsync(ct);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "";
+            }
+
+            using var json = JsonDocument.Parse(text);
+            if (json.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return "";
+            }
+
+            var details = new List<string>();
+            if (
+                json.RootElement.TryGetProperty("message", out var message)
+                && message.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(message.GetString())
+            )
+            {
+                details.Add(message.GetString()!);
+            }
+
+            if (json.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var error in errors.EnumerateArray())
+                {
+                    if (
+                        error.ValueKind == JsonValueKind.Object
+                        && error.TryGetProperty("message", out var item)
+                        && item.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(item.GetString())
+                    )
+                    {
+                        details.Add(item.GetString()!);
+                    }
+                }
+            }
+
+            return string.Join(" ", details.Distinct(StringComparer.Ordinal));
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private static HostingItem Item(JsonElement item, bool pull)

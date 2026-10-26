@@ -134,8 +134,10 @@ public partial class SettingsView : UserControl
 {
     private async void CopyAzureOAuthCode_Click(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainWindowViewModel { HasAzureOAuthCode: true } vm
-            && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        if (
+            DataContext is MainWindowViewModel { HasAzureOAuthCode: true } vm
+            && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard
+        )
             await clipboard.SetTextAsync(vm.AzureOAuthUserCode);
     }
 
@@ -425,7 +427,21 @@ public partial class HostingView : UserControl
                 Button.CommandProperty,
                 new Binding(pullRequests ? "CreatePullRequestCommand" : "CreateIssueCommand")
             );
-        if (!pullRequests) this.FindControl<Button>("MoreItems")!.Content = "Load more";
+        this.FindControl<Button>("NewItem")!.Content = pullRequests ? "New pull request" : "New issue";
+        this.FindControl<Expander>("CreateItemExpander")!.Header = pullRequests
+            ? "Create a pull request"
+            : "Create an issue";
+        if (pullRequests)
+        {
+            this.FindControl<Expander>("CreateItemExpander")!
+                .Bind(
+                    Expander.IsExpandedProperty,
+                    new Binding(nameof(MainWindowViewModel.IsPullRequestFormExpanded)) { Mode = BindingMode.TwoWay }
+                );
+        }
+
+        if (!pullRequests)
+            this.FindControl<Button>("MoreItems")!.Content = "Load more";
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -443,27 +459,56 @@ public partial class HostingView : UserControl
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        if (_hostingViewModel is { } vm) vm.PropertyChanged -= HostingContextChanged;
+        if (_hostingViewModel is { } vm)
+            vm.PropertyChanged -= HostingContextChanged;
         _hostingViewModel = null;
         base.OnDetachedFromVisualTree(e);
     }
 
     private void HostingContextChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (!_pullRequests) return;
-        if (e.PropertyName is nameof(MainWindowViewModel.PullRequestRemoteSignature)
-            or nameof(MainWindowViewModel.HostingState) or nameof(MainWindowViewModel.GithubToken))
+        if (!_pullRequests)
+            return;
+        if (
+            e.PropertyName
+            is nameof(MainWindowViewModel.PullRequestRemoteSignature)
+                or nameof(MainWindowViewModel.HostingState)
+                or nameof(MainWindowViewModel.GithubToken)
+        )
             _needsPullRequestLoad = true;
-        if (_needsPullRequestLoad) QueueCombinedPullRequests();
+        if (_needsPullRequestLoad)
+            QueueCombinedPullRequests();
     }
 
-    private void QueueCombinedPullRequests() => Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+    private void QueueCombinedPullRequests() =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(async () =>
+        {
+            if (
+                !_needsPullRequestLoad
+                || _hostingViewModel is not { } vm
+                || vm.IsHostingBusy
+                || vm.PullRequestRemoteSignature.Length == 0
+            )
+                return;
+            _needsPullRequestLoad = false;
+            await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
+        });
+
+    private void NewItem_Click(object? sender, RoutedEventArgs e)
     {
-        if (!_needsPullRequestLoad || _hostingViewModel is not { } vm || vm.IsHostingBusy
-            || vm.PullRequestRemoteSignature.Length == 0) return;
-        _needsPullRequestLoad = false;
-        await vm.RefreshPullRequestsCommand.ExecuteAsync(null);
-    });
+        if (this.FindControl<Expander>("CreateItemExpander") is not { } expander)
+        {
+            return;
+        }
+
+        if (DataContext is MainWindowViewModel vm)
+        {
+            vm.PullRequestPrefillHint = "";
+        }
+
+        expander.IsExpanded = true;
+        expander.BringIntoView();
+    }
 
     private async void OpenItem_Click(object? sender, RoutedEventArgs e)
     {
@@ -476,10 +521,7 @@ public partial class HostingView : UserControl
         if (
             Uri.TryCreate(item?.Url, UriKind.Absolute, out var uri)
             && (
-                (
-                    uri.Scheme == "https"
-                    && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
-                )
+                (uri.Scheme == "https" && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
                 || IntegrationBrowserPolicy.AllowsForgejo(uri)
             )
             && TopLevel.GetTopLevel(this)?.Launcher is { } launcher

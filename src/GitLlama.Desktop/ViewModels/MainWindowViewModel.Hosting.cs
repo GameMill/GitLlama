@@ -16,7 +16,8 @@ public partial class MainWindowViewModel
     private void InvalidateHosting(bool clearPulls = true)
     {
         Interlocked.Increment(ref _hostingRevision);
-        if (clearPulls || !IsPullRequestWorkspace) Interlocked.Increment(ref _hostingCommentRevision);
+        if (clearPulls || !IsPullRequestWorkspace)
+            Interlocked.Increment(ref _hostingCommentRevision);
         if (clearPulls)
         {
             Interlocked.Increment(ref _pullRequestRevision);
@@ -27,11 +28,13 @@ public partial class MainWindowViewModel
             HasMorePullRequests = false;
         }
         Issues.Clear();
-        if (clearPulls || !IsPullRequestWorkspace) HostingComments.Clear();
+        if (clearPulls || !IsPullRequestWorkspace)
+            HostingComments.Clear();
         SelectedIssue = null;
         HasMoreIssues = false;
         _pullPage = _issuePage = 1;
-        if (clearPulls || !IsPullRequestWorkspace) HostingDetails = "Select a pull request or issue.";
+        if (clearPulls || !IsPullRequestWorkspace)
+            HostingDetails = "Select a pull request or issue.";
     }
 
     partial void OnSelectedPullRequestChanged(HostingItem? value)
@@ -69,8 +72,7 @@ public partial class MainWindowViewModel
     }
 
     private HostingRepository HostingTarget(HostingItem? item = null) =>
-        item?.Repository
-        ?? new(GithubOwner.Trim(), GithubRepository.Trim()) { Provider = _hostingProviderKind };
+        item?.Repository ?? new(GithubOwner.Trim(), GithubRepository.Trim()) { Provider = _hostingProviderKind };
 
     private async Task ShowHostingItemAsync(HostingItem item)
     {
@@ -119,7 +121,11 @@ public partial class MainWindowViewModel
 
     private async Task LoadHostingItemsAsync(bool pulls, bool more)
     {
-        if (pulls) { await LoadAllPullRequestsAsync(); return; }
+        if (pulls)
+        {
+            await LoadAllPullRequestsAsync();
+            return;
+        }
         if (IsHostingBusy)
         {
             return;
@@ -137,9 +143,11 @@ public partial class MainWindowViewModel
         try
         {
             var result = await provider.ListAsync(repository, false, state, page, token);
-            if (revision != Interlocked.Read(ref _hostingRevision)) return;
+            if (revision != Interlocked.Read(ref _hostingRevision))
+                return;
             var items = Issues;
-            if (!more) items.Clear();
+            if (!more)
+                items.Clear();
             foreach (var item in result.Items.Where(item => !items.Any(existing => existing.Number == item.Number)))
                 items.Add(item);
             _issuePage = page;
@@ -252,7 +260,8 @@ public partial class MainWindowViewModel
             : RunHostingChangeAsync(
                 (provider, repo, token) => provider.CommentAsync(repo, item.Number, body, token),
                 item.IsPullRequest,
-                "Comment posted.", HostingTarget(item)
+                "Comment posted.",
+                HostingTarget(item)
             );
     }
 
@@ -265,14 +274,28 @@ public partial class MainWindowViewModel
     private Task ReviewPullRequestAsync(string action)
     {
         var item = SelectedPullRequest;
+        if (item is null)
+        {
+            HostingStatus =
+                action == "APPROVE"
+                    ? "Select a pull request before approving it."
+                    : "Select a pull request before requesting changes.";
+            return Task.CompletedTask;
+        }
+
         var body = HostingComment;
-        return item is null
-            ? Task.CompletedTask
-            : RunHostingChangeAsync(
-                (provider, repo, token) => provider.ReviewAsync(repo, item.Number, item.HeadSha, action, body, token),
-                true,
-                "Review submitted.", HostingTarget(item)
-            );
+        if (action == "REQUEST_CHANGES" && string.IsNullOrWhiteSpace(body))
+        {
+            HostingStatus = "Add a review message before requesting changes.";
+            return Task.CompletedTask;
+        }
+
+        return RunHostingChangeAsync(
+            (provider, repo, token) => provider.ReviewAsync(repo, item.Number, item.HeadSha, action, body, token),
+            true,
+            action == "APPROVE" ? $"Approved pull request #{item.Number}." : $"Requested changes on #{item.Number}.",
+            HostingTarget(item)
+        );
     }
 
     [RelayCommand]
@@ -293,7 +316,8 @@ public partial class MainWindowViewModel
         return RunHostingChangeAsync(
             (provider, repo, token) => provider.MergeAsync(repo, item.Number, item.HeadSha, token),
             true,
-            "Pull request merged.", HostingTarget(item)
+            "Pull request merged.",
+            HostingTarget(item)
         );
     }
 
@@ -305,12 +329,7 @@ public partial class MainWindowViewModel
             ? Task.CompletedTask
             : RunHostingChangeAsync(
                 (provider, repo, token) =>
-                    provider.SetIssueStateAsync(
-                        repo,
-                        item.Number,
-                        item.State == "open" ? "closed" : "open",
-                        token
-                    ),
+                    provider.SetIssueStateAsync(repo, item.Number, item.State == "open" ? "closed" : "open", token),
                 false,
                 "Issue state updated."
             );

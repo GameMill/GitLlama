@@ -87,17 +87,17 @@ public sealed partial class GitRemoteService
         Task.Run<IReadOnlyList<GitRemoteBranchInfo>>(
             () =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
-                ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
-                using var repository = new Repository(repositoryPath);
-                if (repository.Network.Remotes[remoteName] is null)
-                {
-                    throw new InvalidOperationException($"Remote '{remoteName}' does not exist.");
-                }
+            cancellationToken.ThrowIfCancellationRequested();
+            ArgumentException.ThrowIfNullOrWhiteSpace(repositoryPath);
+            ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
+            using var repository = new Repository(repositoryPath);
+            if (repository.Network.Remotes[remoteName] is null)
+            {
+                throw new InvalidOperationException($"Remote '{remoteName}' does not exist.");
+            }
 
-                var prefix = $"refs/remotes/{remoteName}/";
-                var trackedCanonicalName = repository.Head.TrackedBranch?.CanonicalName;
+            var prefix = $"refs/remotes/{remoteName}/";
+            var trackedCanonicalName = repository.Head.TrackedBranch?.CanonicalName;
                 return repository
                     .Branches.Where(branch =>
                         branch.IsRemote
